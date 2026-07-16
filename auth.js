@@ -18,6 +18,7 @@ let currentUser;
 let currentProfile;
 let deploymentMode = 'staging';
 let intakeMode = 'official_guide';
+let referralMode = 'locked';
 
 const dashboardViews = {
   applications: {
@@ -180,7 +181,7 @@ async function loadConfiguration() {
 async function loadProfile(user) {
   const { data, error } = await supabaseClient
     .from('profiles')
-    .select('id, first_name, last_name, organization_name, account_type, status, created_at')
+    .select('id, first_name, last_name, organization_name, organization_id, account_type, status, created_at')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -190,6 +191,7 @@ async function loadProfile(user) {
     first_name: user.user_metadata?.first_name || '',
     last_name: user.user_metadata?.last_name || '',
     organization_name: user.user_metadata?.organization_name || '',
+    organization_id: null,
     account_type: user.user_metadata?.account_type || 'client',
     status: isOrganizationType(user.user_metadata?.account_type) ? 'pending' : 'active',
     created_at: user.created_at
@@ -224,6 +226,7 @@ function configureDashboardNavigation() {
         ['active_clients', 'C', 'Active Clients'],
         ['pending_applications', 'A', 'Pending Applications'],
         ['document_review', 'D', 'Document Review'],
+        ['referrals', 'R', 'Referral Network'],
         ['messages', 'M', 'Messages'],
         ['tasks', 'T', 'Tasks'],
         ['reports', 'R', 'Reports'],
@@ -239,7 +242,7 @@ function configureDashboardNavigation() {
         ['applications', 'A', 'Applications'],
         ['documents', 'D', 'Documents'],
         ['messages', 'M', 'Messages'],
-        ['referrals', 'R', 'Community Referrals'],
+        ['referrals', 'R', isOrganizationType(role) ? 'Referral Network' : 'Community Referrals'],
         ['profile', 'P', 'Profile'],
         ['settings', 'S', 'Settings']
       ];
@@ -285,6 +288,7 @@ function renderHome() {
       ['active_clients', 'C', 'Active Clients', 'View authorized client assignments.'],
       ['pending_applications', 'A', 'Pending Applications', 'Review applications requiring action.'],
       ['document_review', 'D', 'Documents Awaiting Review', 'Manage the protected document-review queue.'],
+      ['referrals', 'R', 'Referral Network', 'Receive, send, and track organization referrals.'],
       ['messages', 'M', 'Messages', 'Open secure staff communications.'],
       ['tasks', 'T', 'Tasks', 'Track assignments and deadlines.'],
       ['reports', 'R', 'Reports', 'Review operational reporting.'],
@@ -315,7 +319,7 @@ function renderHome() {
         ['applications', 'A', 'Applications', 'Start and track Medicaid applications.'],
         ['documents', 'D', 'Documents', 'Review document requirements and requests.'],
         ['messages', 'M', 'Messages', 'Communicate securely with the MMS team.'],
-        ['referrals', 'R', 'Community Referrals', 'Follow referrals to community resources.'],
+        ['referrals', 'R', isOrganizationType(currentProfile?.account_type) ? 'Referral Network' : 'Community Referrals', isOrganizationType(currentProfile?.account_type) ? 'Refer fictional test clients to MMS or another approved organization.' : 'Follow referrals to community resources.'],
         ['profile', 'P', 'Profile', 'Review your account identity and role.'],
         ['settings', 'S', 'Settings', 'Manage security and notification preferences.']
       ].map(([view, icon, title, text]) => `<article class="dashboard-card"><span class="card-icon">${icon}</span><h2>${title}</h2><p>${text}</p><button type="button" data-open-view="${view}">Open ${title}</button></article>`).join('')}
@@ -775,6 +779,109 @@ async function saveAuthorizedRepresentative(form) {
   await renderCoverageRepresentative(applicationId, 'Fictional authorized representative choice saved.');
 }
 
+const referralServiceLabels = {
+  medicaid_navigation: 'Medicaid navigation',
+  living_legacy: 'Living Legacy planning',
+  long_term_care: 'Long-term care or placement',
+  home_care: 'Home care',
+  adult_day: 'Adult day services',
+  hospice_palliative: 'Hospice or palliative support',
+  benefits_documents: 'Benefits or document help',
+  community_resource: 'Community resource',
+  other: 'Other service'
+};
+
+const referralStatusLabels = {
+  sent: 'Sent', acknowledged: 'Acknowledged', accepted: 'Accepted', declined: 'Declined',
+  in_progress: 'In progress', completed: 'Completed', closed: 'Closed', cancelled: 'Cancelled'
+};
+
+function referralStatusLabel(status) { return referralStatusLabels[status] || String(status || '').replaceAll('_', ' '); }
+function referralStatusClass(status) {
+  if (['completed', 'closed'].includes(status)) return 'positive';
+  if (['declined', 'cancelled'].includes(status)) return 'danger';
+  if (['accepted', 'in_progress'].includes(status)) return 'active';
+  return 'waiting';
+}
+function formatReferralDateTime(value) {
+  if (!value) return 'Not recorded';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+}
+
+function referralListTable(referrals) {
+  if (!referrals.length) return '<p class="admin-empty">No referrals are available yet.</p>';
+  return `<div class="admin-table-wrap"><table class="admin-table referral-table"><thead><tr><th>Reference</th><th>Client / case</th><th>Route</th><th>Service</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${referrals.map(referral => `<tr>
+    <td><strong>${escapeHtml(referral.reference_number)}</strong><small>${referral.is_recipient ? 'Received' : referral.is_sender ? 'Sent' : 'MMS oversight'}</small></td>
+    <td>${escapeHtml(referral.client_label)}</td>
+    <td><small>${escapeHtml(referral.sender_organization)}</small><span class="referral-route-arrow" aria-hidden="true">→</span><small>${escapeHtml(referral.recipient_organization)}</small></td>
+    <td>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</td>
+    <td><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></td>
+    <td>${escapeHtml(formatAccountDate(referral.updated_at))}</td>
+    <td><button type="button" data-open-referral="${escapeHtml(referral.id)}">View</button></td>
+  </tr>`).join('')}</tbody></table></div>`;
+}
+
+async function renderReferralNetwork(notice = '') {
+  elements.headerViewName.textContent = 'Referral Network';
+  if (referralMode === 'locked') {
+    elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Approved organizations will be able to refer clients to Medicaid Made Simple and to one another, with a shared status timeline.</p></section>
+      <div class="safety-banner"><span aria-hidden="true">i</span><div><strong>Production activation is pending.</strong><p>The working referral flow is being tested in staging. Real client referrals will remain locked until the privacy, security, and vendor requirements are approved.</p></div></div>`;
+    return;
+  }
+  elements.dashboardContent.innerHTML = '<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Loading your referral workspace…</p></section>';
+  try {
+    const data = await adminRequest('/api/referrals');
+    const referrals = data.referrals || [];
+    const received = referrals.filter(referral => referral.is_recipient).length;
+    const needsResponse = referrals.filter(referral => referral.is_recipient && ['sent', 'acknowledged'].includes(referral.status)).length;
+    const active = referrals.filter(referral => ['accepted', 'in_progress'].includes(referral.status)).length;
+    const completed = referrals.filter(referral => ['completed', 'closed'].includes(referral.status)).length;
+    const canCreate = data.directory?.length > 0;
+    elements.dashboardContent.innerHTML = `
+      <section class="content-heading referral-heading"><div><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Send a referral to Medicaid Made Simple or another approved organization and follow it through completion.</p></div><span class="status-pill">${escapeHtml(data.organization?.name || roleLabel(currentProfile?.account_type))}</span></section>
+      ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging referrals only.</strong><p>Use invented names and scenarios. Do not enter Social Security numbers, dates of birth, medical records, financial details, or real client information.</p></div></div>
+      <section class="referral-metrics" aria-label="Referral summary">
+        ${[['Received', received], ['Needs response', needsResponse], ['Active', active], ['Completed', completed]].map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}
+      </section>
+      <section class="admin-panel referral-compose"><div class="referral-section-heading"><div><p class="eyebrow">New connection</p><h2>Create a referral</h2><p>The recipient will see the referral in its own inbox and can acknowledge, accept, decline, and complete it.</p></div></div>
+        ${canCreate ? `<form id="referralCreateForm" class="admin-form">
+          <div class="two-fields"><div class="field"><label for="referralRecipient">Refer to</label><select id="referralRecipient" name="recipientOrganizationId" required><option value="">Select an approved organization</option>${data.directory.map(organization => `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)} — ${escapeHtml(organization.organization_type === 'mms' ? 'MMS' : roleLabel(organization.organization_type))}</option>`).join('')}</select></div>
+          <div class="field"><label for="referralService">Service requested</label><select id="referralService" name="serviceRequested" required><option value="">Select a service</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}</select></div></div>
+          <div class="two-fields"><div class="field"><label for="referralClientLabel">Fictional client or case label</label><input id="referralClientLabel" name="clientLabel" maxlength="120" placeholder="Example: Captain Tater Tot" required><small class="field-help">Use an invented label for staging. Do not use a real client name.</small></div>
+          <div class="field"><label for="referralUrgency">Urgency</label><select id="referralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div>
+          <div class="field"><label for="referralSummary">Fictional referral summary</label><textarea id="referralSummary" name="summary" minlength="10" maxlength="1000" placeholder="Describe the fictional need and requested next step." required></textarea><small class="field-help">Minimum necessary information only. Never include test SSNs, even fictional ones.</small></div>
+          <label class="test-confirmation"><input name="consentConfirmed" type="checkbox" required><span>I confirm the fictional client authorized this referral and information sharing.</span></label>
+          <label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm every detail in this referral is fictional staging information.</span></label>
+          <button class="button primary" type="submit">Send fictional referral</button>
+        </form>` : '<p class="admin-empty">No other approved organizations are available in the referral directory yet.</p>'}
+      </section>
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Shared tracking</p><h2>All referrals</h2><p>Open any referral to see its current owner, allowed next actions, and complete history.</p></div></div>${referralListTable(referrals)}</section>`;
+  } catch (error) {
+    elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1></section><div class="form-message error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function renderReferralDetail(referralId, notice = '') {
+  elements.headerViewName.textContent = 'Referral Details';
+  elements.dashboardContent.innerHTML = '<section class="content-heading"><p class="eyebrow">Referral</p><h1>Loading referral…</h1></section>';
+  try {
+    const { referral, events = [] } = await adminRequest(`/api/referrals?referralId=${encodeURIComponent(referralId)}`);
+    elements.dashboardContent.innerHTML = `
+      <button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button>
+      <section class="content-heading referral-heading"><div><p class="eyebrow">${escapeHtml(referral.reference_number)}</p><h1>${escapeHtml(referral.client_label)}</h1><p>${escapeHtml(referral.sender_organization)} <span aria-hidden="true">→</span> ${escapeHtml(referral.recipient_organization)}</p></div><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></section>
+      ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging record.</strong><p>Do not add real client, medical, financial, or identifying information to this referral or its updates.</p></div></div>
+      <div class="referral-detail-grid"><section class="admin-panel"><h2>Referral summary</h2><dl class="referral-facts"><dt>Service</dt><dd>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</dd><dt>Urgency</dt><dd>${escapeHtml(referral.urgency.replaceAll('_', ' '))}</dd><dt>Sent</dt><dd>${escapeHtml(formatReferralDateTime(referral.created_at))}</dd><dt>From</dt><dd>${escapeHtml(referral.sender_organization)}</dd><dt>To</dt><dd>${escapeHtml(referral.recipient_organization)}</dd></dl><div class="referral-summary-copy"><strong>Requested help</strong><p>${escapeHtml(referral.summary)}</p></div>
+        ${referral.allowed_status_actions?.length ? `<div class="referral-actions"><h3>Available next actions</h3>${referral.allowed_status_actions.map(status => `<button class="button ${['accepted', 'acknowledged', 'in_progress', 'completed'].includes(status) ? 'primary' : 'secondary'}" type="button" data-referral-status="${escapeHtml(status)}" data-referral-id="${escapeHtml(referral.id)}">${escapeHtml(referralStatusLabel(status))}</button>`).join('')}</div>` : '<p class="admin-empty">No status action is required from your role right now.</p>'}
+      </section>
+      <section class="admin-panel"><h2>Add an update</h2><form id="referralNoteForm" data-referral-id="${escapeHtml(referral.id)}"><div class="field"><label for="referralNote">Fictional update</label><textarea id="referralNote" name="note" minlength="2" maxlength="1000" placeholder="Add a next step or coordination update." required></textarea></div><button class="button secondary" type="submit">Add update</button></form></section></div>
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Closed-loop history</p><h2>Referral timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(event.event_type === 'referral_sent' ? 'Referral sent' : event.event_type === 'note_added' ? 'Update added' : `${referralStatusLabel(event.previous_status)} → ${referralStatusLabel(event.new_status)}`)}</strong><small>${escapeHtml(event.actor_name)}${event.actor_organization ? ` · ${escapeHtml(event.actor_organization)}` : ''} · ${escapeHtml(formatReferralDateTime(event.created_at))}</small>${event.note ? `<p>${escapeHtml(event.note)}</p>` : ''}</div></li>`).join('') : '<li><div><strong>No history is available.</strong></div></li>'}</ol></section>`;
+  } catch (error) {
+    elements.dashboardContent.innerHTML = `<button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button><div class="form-message error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 function renderPlaceholder(view) {
   const item = dashboardViews[view];
   elements.headerViewName.textContent = item.title;
@@ -789,6 +896,7 @@ function openDashboardView(view) {
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
   else if (view === 'applications') void renderApplications();
+  else if (view === 'referrals' && (isOrganizationType(currentProfile?.account_type) || isPrivilegedRole(currentProfile?.account_type))) void renderReferralNetwork();
   else if (view === 'pending_applications' && isPrivilegedRole(currentProfile?.account_type)) void renderApplicationQueue();
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
@@ -844,6 +952,18 @@ function wireInterface() {
   elements.dashboardContent.addEventListener('click', event => {
     const button = event.target.closest('[data-open-view]');
     if (button) return openDashboardView(button.dataset.openView);
+    const openReferralButton = event.target.closest('[data-open-referral]');
+    if (openReferralButton) return void renderReferralDetail(openReferralButton.dataset.openReferral);
+    if (event.target.closest('[data-back-referrals]')) return void renderReferralNetwork();
+    const referralStatusButton = event.target.closest('[data-referral-status]');
+    if (referralStatusButton) {
+      const nextStatus = referralStatusButton.dataset.referralStatus;
+      if (!window.confirm(`Change this fictional referral to “${referralStatusLabel(nextStatus)}”?`)) return;
+      referralStatusButton.disabled = true;
+      return void adminRequest('/api/referrals', { method: 'POST', body: { action: 'update_status', referralId: referralStatusButton.dataset.referralId, status: nextStatus } })
+        .then(() => renderReferralDetail(referralStatusButton.dataset.referralId, `Referral status changed to ${referralStatusLabel(nextStatus)}.`))
+        .catch(error => { referralStatusButton.disabled = false; window.alert(error.message); });
+    }
     const programButton = event.target.closest('[data-program-id]');
     if (programButton) return void renderApplications(programButton.dataset.programId);
     const startTestButton = event.target.closest('[data-start-test-application]');
@@ -945,6 +1065,29 @@ function wireInterface() {
       .catch(error => { adminButton.disabled = false; window.alert(error.message); });
   });
   elements.dashboardContent.addEventListener('submit', event => {
+    if (event.target.id === 'referralCreateForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      const values = new FormData(form);
+      setBusy(form, true);
+      return void adminRequest('/api/referrals', { method: 'POST', body: {
+        action: 'create', recipientOrganizationId: values.get('recipientOrganizationId'), serviceRequested: values.get('serviceRequested'),
+        clientLabel: values.get('clientLabel'), urgency: values.get('urgency'), summary: values.get('summary'),
+        consentConfirmed: values.get('consentConfirmed') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+      } }).then(({ referral }) => renderReferralDetail(referral.id, 'Fictional referral sent. Both organizations can now track it.'))
+        .catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'referralNoteForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      const values = new FormData(form);
+      setBusy(form, true);
+      return void adminRequest('/api/referrals', { method: 'POST', body: { action: 'add_note', referralId: form.dataset.referralId, note: values.get('note') } })
+        .then(() => renderReferralDetail(form.dataset.referralId, 'Referral update added to the shared timeline.'))
+        .catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
     if (event.target.id === 'applicantInfoForm') {
       event.preventDefault();
       const form = event.target;
@@ -1107,6 +1250,7 @@ async function initialize() {
 
   deploymentMode = configuration.deploymentMode || 'staging';
   intakeMode = configuration.intakeMode || (deploymentMode === 'production' ? 'official_guide' : 'fictional_test');
+  referralMode = configuration.referralMode || 'locked';
 
   supabaseClient = createClient(configuration.supabaseUrl, configuration.supabasePublishableKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }

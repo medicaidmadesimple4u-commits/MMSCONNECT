@@ -12,6 +12,7 @@ export default function handler(request, response) {
     supabaseUrl,
     supabasePublishableKey,
     deploymentMode,
-    intakeMode: deploymentMode === 'production' ? 'official_guide' : 'fictional_test'
+    intakeMode: deploymentMode === 'production' ? 'official_guide' : 'fictional_test',
+    referralMode: deploymentMode === 'production' && process.env.MMS_REFERRALS_ENABLED !== 'true' ? 'locked' : 'fictional_test'
   });
 }

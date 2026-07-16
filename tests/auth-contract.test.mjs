@@ -168,6 +168,31 @@ test('new account consent is versioned and server-recorded', async () => {
   assert.match(sql, /revoke all on public\.account_consents from anon, authenticated/i);
 });
 
+test('referral network is closed-loop, role protected, and staging safe', async () => {
+  const [script, api, config, sql] = await Promise.all([
+    read('auth.js'), read('api/referrals.js'), read('api/config.js'), read('supabase/migrations/20260717001500_add_referral_network.sql')
+  ]);
+  assert.match(config, /referralMode/);
+  assert.match(config, /MMS_REFERRALS_ENABLED/);
+  assert.match(api, /requireReferralUser/);
+  assert.match(api, /The referral network is not available in production yet/);
+  assert.match(api, /body\.fictionalConfirmation !== true/);
+  assert.match(api, /body\.consentConfirmed !== true/);
+  for (const action of ['create', 'add_note', 'update_status']) assert.match(api, new RegExp(`action === '${action}'`));
+  for (const status of ['sent', 'acknowledged', 'accepted', 'declined', 'in_progress', 'completed', 'closed', 'cancelled']) assert.match(api, new RegExp(status));
+  for (const table of ['organizations', 'referrals', 'referral_events']) {
+    assert.match(sql, new RegExp(`create table if not exists public\\.${table}`, 'i'));
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+    assert.match(sql, new RegExp(`revoke all on table public\\.${table} from anon, authenticated`, 'i'));
+  }
+  assert.match(sql, /check \(sender_organization_id <> recipient_organization_id\)/i);
+  assert.match(script, /renderReferralNetwork/);
+  assert.match(script, /renderReferralDetail/);
+  assert.match(script, /id="referralCreateForm"/);
+  assert.match(script, /Fictional staging referrals only/);
+  assert.doesNotMatch(script, /\.from\(['"]referrals['"]\)/);
+});
+
 test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {
   const [library, accounts, invite, update, intake] = await Promise.all([
     read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')

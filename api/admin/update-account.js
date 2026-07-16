@@ -14,7 +14,7 @@ export default async function handler(request, response) {
     if (!targetId || !actions.has(action)) return sendJson(response, 400, { error: 'A valid account action is required.' });
     if (targetId === administrator.user.id) return sendJson(response, 400, { error: 'Use a separate administrator account to change your own access.' });
 
-    const targets = await serviceRequest(`/rest/v1/profiles?select=id,account_type,status&id=eq.${encodeURIComponent(targetId)}&limit=1`);
+    const targets = await serviceRequest(`/rest/v1/profiles?select=id,organization_name,organization_id,account_type,status&id=eq.${encodeURIComponent(targetId)}&limit=1`);
     const target = targets?.[0];
     if (!target) return sendJson(response, 404, { error: 'The account could not be found.' });
 

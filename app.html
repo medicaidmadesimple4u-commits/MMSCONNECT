@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Secure account access for MMS Connect.">
+  <title>MMS Connect | Account Access</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <div id="loadingScreen" class="loading-screen" aria-live="polite">
+    <div class="brand-lockup">
+      <span class="brand-icon" aria-hidden="true">M</span>
+      <span>MMS Connect</span>
+    </div>
+    <div class="spinner" aria-hidden="true"></div>
+    <p>Preparing your secure account…</p>
+  </div>
+
+  <div id="configurationScreen" class="configuration-screen" hidden>
+    <div class="configuration-card">
+      <div class="brand-lockup">
+        <span class="brand-icon" aria-hidden="true">M</span>
+        <span>MMS Connect</span>
+      </div>
+      <p class="eyebrow">Setup required</p>
+      <h1>Account access is not connected yet.</h1>
+      <p>The application interface is ready, but the secure authentication service must be configured before registration can open.</p>
+      <div class="notice warning"><strong>No account was created.</strong> Do not enter confidential or Medicaid-related information during setup.</div>
+      <a class="button primary" href="/">Return to the MMS Connect homepage</a>
+    </div>
+  </div>
+
+  <div id="authShell" class="auth-shell" hidden>
+    <aside class="auth-story">
+      <a class="brand-lockup light" href="/" aria-label="MMS Connect home">
+        <span class="brand-icon" aria-hidden="true">M</span>
+        <span>MMS Connect</span>
+      </a>
+      <div class="story-copy">
+        <p class="eyebrow light-text">Medicaid Made Simple</p>
+        <h1>One secure place to move care forward.</h1>
+        <p>Access your applications, requests, messages, and next steps with clear guidance along the way.</p>
+      </div>
+      <div class="privacy-note">
+        <strong>Privacy comes first.</strong>
+        <span>Account access is secured, but intake and document collection remain disabled until the protected-data environment is approved.</span>
+      </div>
+    </aside>
+
+    <main class="auth-main" id="authMain">
+      <a class="mobile-brand brand-lockup" href="/">
+        <span class="brand-icon" aria-hidden="true">M</span>
+        <span>MMS Connect</span>
+      </a>
+
+      <section class="auth-panel" data-auth-view="signin" aria-labelledby="signinTitle">
+        <p class="eyebrow">Welcome back</p>
+        <h2 id="signinTitle">Sign in to MMS Connect</h2>
+        <p class="intro">Use the email address connected to your account.</p>
+        <div class="form-message" data-message="signin" role="status" hidden></div>
+        <form id="signInForm" novalidate>
+          <div class="field">
+            <label for="signInEmail">Email address</label>
+            <input id="signInEmail" name="email" type="email" autocomplete="email" inputmode="email" required>
+          </div>
+          <div class="field">
+            <div class="label-row">
+              <label for="signInPassword">Password</label>
+              <a href="#forgot">Forgot password?</a>
+            </div>
+            <div class="password-field">
+              <input id="signInPassword" name="password" type="password" autocomplete="current-password" required>
+              <button class="password-toggle" type="button" data-toggle-password="signInPassword" aria-label="Show password">Show</button>
+            </div>
+          </div>
+          <button class="button primary full" type="submit">Sign in</button>
+        </form>
+        <p class="switch-view">New to MMS Connect? <a href="#register">Create an account</a></p>
+      </section>
+
+      <section class="auth-panel" data-auth-view="register" aria-labelledby="registerTitle" hidden>
+        <p class="eyebrow">Create your account</p>
+        <h2 id="registerTitle">Get started with MMS Connect</h2>
+        <p class="intro">Choose the account type that best describes how you will use the platform.</p>
+        <div class="form-message" data-message="register" role="status" hidden></div>
+        <form id="registerForm" novalidate>
+          <fieldset class="account-types">
+            <legend>Account type</legend>
+            <label class="choice-card">
+              <input type="radio" name="accountType" value="client" checked>
+              <span><strong>Client</strong><small>I am applying for benefits or managing my own case.</small></span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="accountType" value="authorized_representative">
+              <span><strong>Authorized Representative</strong><small>I assist another person with their permission or legal authority.</small></span>
+            </label>
+          </fieldset>
+          <div class="two-fields">
+            <div class="field">
+              <label for="firstName">First name</label>
+              <input id="firstName" name="firstName" autocomplete="given-name" required maxlength="80">
+            </div>
+            <div class="field">
+              <label for="lastName">Last name</label>
+              <input id="lastName" name="lastName" autocomplete="family-name" required maxlength="80">
+            </div>
+          </div>
+          <div class="field">
+            <label for="registerEmail">Email address</label>
+            <input id="registerEmail" name="email" type="email" autocomplete="email" inputmode="email" required>
+          </div>
+          <div class="field">
+            <label for="registerPassword">Create password</label>
+            <div class="password-field">
+              <input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="12" required aria-describedby="passwordHelp">
+              <button class="password-toggle" type="button" data-toggle-password="registerPassword" aria-label="Show password">Show</button>
+            </div>
+            <small id="passwordHelp" class="field-help">Use at least 12 characters with upper- and lowercase letters, a number, and a symbol.</small>
+          </div>
+          <div class="field">
+            <label for="confirmPassword">Confirm password</label>
+            <div class="password-field">
+              <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" required>
+              <button class="password-toggle" type="button" data-toggle-password="confirmPassword" aria-label="Show password">Show</button>
+            </div>
+          </div>
+          <label class="check-row">
+            <input name="terms" type="checkbox" required>
+            <span>I agree to use MMS Connect only for its intended purpose and understand that confidential submissions are not enabled yet.</span>
+          </label>
+          <button class="button primary full" type="submit">Create account</button>
+        </form>
+        <p class="switch-view">Already have an account? <a href="#signin">Sign in</a></p>
+      </section>
+
+      <section class="auth-panel" data-auth-view="forgot" aria-labelledby="forgotTitle" hidden>
+        <p class="eyebrow">Password help</p>
+        <h2 id="forgotTitle">Reset your password</h2>
+        <p class="intro">Enter your email address. If an account matches, we will send password-reset instructions.</p>
+        <div class="form-message" data-message="forgot" role="status" hidden></div>
+        <form id="forgotForm" novalidate>
+          <div class="field">
+            <label for="forgotEmail">Email address</label>
+            <input id="forgotEmail" name="email" type="email" autocomplete="email" inputmode="email" required>
+          </div>
+          <button class="button primary full" type="submit">Send reset instructions</button>
+        </form>
+        <p class="switch-view"><a href="#signin">Return to sign in</a></p>
+      </section>
+
+      <section class="auth-panel" data-auth-view="reset" aria-labelledby="resetTitle" hidden>
+        <p class="eyebrow">Choose a new password</p>
+        <h2 id="resetTitle">Secure your account</h2>
+        <p class="intro">Your new password must be different from passwords you use elsewhere.</p>
+        <div class="form-message" data-message="reset" role="status" hidden></div>
+        <form id="resetForm" novalidate>
+          <div class="field">
+            <label for="newPassword">New password</label>
+            <div class="password-field">
+              <input id="newPassword" name="password" type="password" autocomplete="new-password" minlength="12" required>
+              <button class="password-toggle" type="button" data-toggle-password="newPassword" aria-label="Show password">Show</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="confirmNewPassword">Confirm new password</label>
+            <input id="confirmNewPassword" name="confirmPassword" type="password" autocomplete="new-password" required>
+          </div>
+          <button class="button primary full" type="submit">Update password</button>
+        </form>
+      </section>
+
+      <footer class="auth-footer">© <span data-current-year></span> Medicaid Made Simple LLC</footer>
+    </main>
+  </div>
+
+  <div id="dashboardShell" class="dashboard-shell" hidden>
+    <aside class="dashboard-sidebar">
+      <a class="brand-lockup light" href="/">
+        <span class="brand-icon" aria-hidden="true">M</span>
+        <span>MMS Connect</span>
+      </a>
+      <nav class="dashboard-nav" aria-label="Account navigation">
+        <button class="active" data-dashboard-view="home"><span aria-hidden="true">⌂</span> Home</button>
+        <button data-dashboard-view="applications"><span aria-hidden="true">▤</span> Applications</button>
+        <button data-dashboard-view="documents"><span aria-hidden="true">▱</span> Documents</button>
+        <button data-dashboard-view="messages"><span aria-hidden="true">◇</span> Messages</button>
+        <button data-dashboard-view="referrals"><span aria-hidden="true">◎</span> Community Referrals</button>
+        <button data-dashboard-view="profile"><span aria-hidden="true">○</span> Profile</button>
+        <button data-dashboard-view="settings"><span aria-hidden="true">⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-safety"><strong>Protected-data features are off.</strong><span>Do not submit confidential information yet.</span></div>
+    </aside>
+    <div class="dashboard-frame">
+      <header class="dashboard-header">
+        <button id="menuButton" class="menu-button" type="button" aria-label="Open navigation">☰</button>
+        <div>
+          <p class="header-label">MMS Connect</p>
+          <strong id="headerViewName">Home</strong>
+        </div>
+        <div class="account-menu">
+          <span id="accountInitials" class="avatar" aria-hidden="true">MC</span>
+          <span class="account-summary"><strong id="accountName">MMS Connect User</strong><small id="accountRole">Client</small></span>
+          <button id="signOutButton" class="text-button" type="button">Sign out</button>
+        </div>
+      </header>
+      <main id="dashboardContent" class="dashboard-content" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <script type="module" src="/auth.js"></script>
+</body>
+</html>

@@ -148,7 +148,8 @@
       font: inherit;
       font-weight: 800;
       text-align: center;
-      cursor: not-allowed;
+      cursor: pointer;
+      text-decoration: none;
     }
 
     .button-primary { color: var(--white); background: var(--navy); }
@@ -350,9 +351,9 @@
         <h1>Connecting Care.<br><span>Simplifying Medicaid.</span></h1>
         <p class="lead">One clear, supportive place for families, caregivers, and care partners to navigate benefits and plan confidently for what comes next.</p>
         <div class="actions" aria-label="Account actions coming soon">
-          <span class="button button-primary" aria-disabled="true">Sign In</span>
-          <span class="button button-secondary" aria-disabled="true">Create Account</span>
-          <p class="button-note">Secure account access is coming soon.</p>
+          <a class="button button-primary" href="/app.html#signin">Sign In</a>
+          <a class="button button-secondary" href="/app.html#register">Create Account</a>
+          <p class="button-note">Secure account access requires email verification.</p>
         </div>
       </div>
 
@@ -432,12 +433,11 @@
 
   <footer>
     <div class="shell footer-row">
-      <p>© <span id="year"></span> Medicaid Made Simple LLC. All rights reserved.</p>
+      <p>© <span data-current-year></span> Medicaid Made Simple LLC. All rights reserved.</p>
       <p>MMS Connect is currently in its introductory phase.</p>
     </div>
   </footer>
 
-  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script src="/landing.js" defer></script>
 </body>
 </html>
-Trigger Vercel deployment

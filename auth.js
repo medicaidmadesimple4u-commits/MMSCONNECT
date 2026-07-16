@@ -218,6 +218,7 @@ function configureDashboardNavigation() {
   const items = isPrivilegedRole(role)
     ? [
         ['home', 'H', 'Staff Home'],
+        ['applications', 'I', 'Intake Programs'],
         ['active_clients', 'C', 'Active Clients'],
         ['pending_applications', 'A', 'Pending Applications'],
         ['document_review', 'D', 'Document Review'],
@@ -278,6 +279,7 @@ function renderHome() {
   if (privileged) {
     const administrator = currentProfile?.account_type === 'administrator';
     const staffCards = [
+      ['applications', 'I', 'Intake Programs', 'Review NCDHHS policy-guided intake pathways.'],
       ['active_clients', 'C', 'Active Clients', 'View authorized client assignments.'],
       ['pending_applications', 'A', 'Pending Applications', 'Review applications requiring action.'],
       ['document_review', 'D', 'Documents Awaiting Review', 'Manage the protected document-review queue.'],
@@ -429,7 +431,7 @@ function openDashboardView(view) {
   elements.dashboard.classList.remove('nav-open');
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
-  else if (view === 'applications' && !isPrivilegedRole(currentProfile?.account_type)) renderApplications();
+  else if (view === 'applications') renderApplications();
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);

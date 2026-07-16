@@ -35,6 +35,8 @@ test('browser auth uses supported Supabase operations', async () => {
   assert.match(script, /staff_management/);
   assert.match(script, /renderApplications/);
   assert.match(script, /data-program-id/);
+  assert.match(script, /\['applications', 'I', 'Intake Programs'\]/);
+  assert.match(script, /else if \(view === 'applications'\) renderApplications\(\)/);
   assert.doesNotMatch(script, /service[_-]?role/i);
 });
 

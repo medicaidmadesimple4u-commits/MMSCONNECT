@@ -130,6 +130,7 @@ test('administrator and intake APIs verify roles and keep privileged credentials
     read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')
   ]);
   assert.match(library, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(library, /mms-connect-env-staging-mms-navigators\.vercel\.app/);
   assert.match(library, /profile\.account_type !== 'administrator'/);
   assert.match(accounts, /requireAdministrator/);
   assert.match(invite, /requireAllowedOrigin/);

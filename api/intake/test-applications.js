@@ -139,8 +139,8 @@ export default async function handler(request, response) {
     }
 
     if (action === 'submit') {
-      const application = await testApplication(applicationId, staff.user.id);
-      if (!application || application.status !== 'draft' || !confirmedFictional(body)) return sendJson(response, 400, { error: 'Only an owned fictional draft can be submitted.' });
+      const application = await accessibleApplication(staff, applicationId);
+      if (!application || application.status !== 'draft' || !confirmedFictional(body)) return sendJson(response, 400, { error: 'Only an accessible fictional draft can be submitted.' });
       const details = await applicationDetails(application);
       if (!details.completion.ready) return sendJson(response, 400, { error: 'Complete every required fictional intake section before submitting.' });
       const updated = await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'submitted' } });
@@ -148,8 +148,9 @@ export default async function handler(request, response) {
       return sendJson(response, 200, { application: updated?.[0] });
     }
 
-    const application = await testApplication(applicationId, staff.user.id);
-    if (!application || application.status !== 'draft') return sendJson(response, 404, { error: 'The editable fictional test application was not found.' });
+    const application = await accessibleApplication(staff, applicationId);
+    if (!application) return sendJson(response, 404, { error: 'The fictional test application was not found or is not accessible to this account.' });
+    if (application.status !== 'draft') return sendJson(response, 409, { error: 'This fictional application is read-only after submission. Reset it to a blank draft before entering new test information.' });
     if (!confirmedFictional(body)) return sendJson(response, 400, { error: 'Confirm that every value is fictional test information.' });
 
     if (action === 'save_applicant') {

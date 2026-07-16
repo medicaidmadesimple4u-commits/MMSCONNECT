@@ -497,6 +497,7 @@ a { color: var(--blue); text-underline-offset: 3px; }
 .completion-list button.incomplete > span { background: var(--warning); }
 .completion-list button strong { color: var(--navy); }
 .completion-list button small { color: var(--muted); }
+.completion-list button:disabled { cursor: default; opacity: .82; }
 
 @media (max-width: 960px) {
   .auth-shell { grid-template-columns: 1fr; }

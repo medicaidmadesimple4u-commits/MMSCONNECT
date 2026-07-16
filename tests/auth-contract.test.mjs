@@ -134,14 +134,19 @@ test('completed intake sections and review workflow remain server-only and audit
 });
 
 test('fictional cases can be reset or deleted through the protected server endpoint', async () => {
-  const [api, resetSql] = await Promise.all([
-    read('api/intake/test-applications.js'), read('supabase/migrations/20260716230000_add_test_application_reset_audit.sql')
+  const [api, script, resetSql] = await Promise.all([
+    read('api/intake/test-applications.js'), read('auth.js'), read('supabase/migrations/20260716230000_add_test_application_reset_audit.sql')
   ]);
   assert.match(api, /action === 'reset' \|\| action === 'delete_application'/);
   assert.match(api, /accessibleApplication\(staff, applicationId\)/);
+  assert.ok((api.match(/accessibleApplication\(staff, applicationId\)/g) || []).length >= 3, 'administrator-accessible drafts must remain editable after reset');
+  assert.match(api, /read-only after submission\. Reset it to a blank draft/);
   assert.match(api, /application_authorized_representatives/);
   assert.match(api, /application_applicants/);
   assert.match(api, /application_reset/);
+  assert.match(script, /const editableDraft = application\.status === 'draft' && \(administrator \|\| application\.owner_id === currentUser\?\.id\)/);
+  assert.match(script, /editableDraft \? `data-open-test-step/);
+  assert.match(script, /Use Reset from the Applications or Pending Applications page/);
   assert.match(resetSql, /application_reset/);
 });
 

@@ -12,6 +12,7 @@ MMS Connect is the client and authorized-representative portal for Medicaid Made
 - Protected dashboard shell
 - NCDHHS policy-guided intake pathway preview
 - Staff-only fictional intake testing with protected save and resume
+- Fictional Household & Residency and Income & Employment workflows
 - Applications, Documents, Messages, Community Referrals, Profile, and Settings navigation
 - Confidential-data collection intentionally disabled
 

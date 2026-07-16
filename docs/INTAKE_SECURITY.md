@@ -12,6 +12,8 @@ The first protected-intake build is a staging-only security test. It is not appr
 - Application, applicant, assignment, and audit tables all use row-level security.
 - Browser users cannot update application ownership, status, policy version, environment, or test-mode fields.
 - Applicant saves and application creation create audit records without copying applicant details into the audit log.
+- Residency, household-member, and income-source changes create audit events without copying addresses, names, or financial amounts into the audit log.
+- Household, residency, and income tables are server-only; browser database roles receive no direct table privileges.
 - The interface requires confirmation that all entered information is fictional.
 
 ## Not enabled
@@ -20,7 +22,7 @@ The first protected-intake build is a staging-only security test. It is not appr
 - Public client data entry
 - Application submission or eligibility decisions
 - Staff assignment controls
-- Household, income, resource, medical, or immigration detail screens
+- Resource, medical, citizenship, immigration, insurance, or long-term-care detail screens
 - Document uploads
 - Production access to the intake interface
 

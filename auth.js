@@ -467,7 +467,7 @@ async function renderApplicantInformation(applicationId, notice = '') {
         <fieldset><legend>Basic details</legend><div class="two-fields"><div class="field"><label for="applicantDob">Date of birth</label><input id="applicantDob" name="dateOfBirth" type="date" max="${new Date().toISOString().slice(0, 10)}" value="${value('date_of_birth')}" required></div><div class="field"><label for="applicantCounty">North Carolina county</label><input id="applicantCounty" name="ncCounty" maxlength="80" value="${value('nc_county')}"></div></div><div class="two-fields"><div class="field"><label for="applicantLanguage">Preferred language</label><input id="applicantLanguage" name="preferredLanguage" maxlength="80" value="${value('preferred_language', 'English')}" required></div><div class="field"><label for="applicantCoverage">Applying for coverage?</label><select id="applicantCoverage" name="applyingForCoverage"><option value="true" ${applicant?.applying_for_coverage !== false ? 'selected' : ''}>Yes</option><option value="false" ${applicant?.applying_for_coverage === false ? 'selected' : ''}>No</option></select></div></div></fieldset>
         <fieldset><legend>Test contact details</legend><div class="two-fields"><div class="field"><label for="applicantEmail">Email</label><input id="applicantEmail" name="contactEmail" type="email" maxlength="254" value="${value('contact_email')}"></div><div class="field"><label for="applicantPhone">Phone</label><input id="applicantPhone" name="phone" maxlength="30" value="${value('phone')}"></div></div></fieldset>
         <label class="test-confirmation"><input type="checkbox" name="fictionalConfirmation" required><span>I confirm this is completely fictional test information and does not identify a real person.</span></label>
-        <div class="intake-form-actions"><button class="button secondary" type="button" data-back-intake-programs>Back to intake programs</button><button class="button primary" type="submit">Save test information</button></div>
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-back-intake-programs>Back to intake programs</button><div><button class="button secondary" type="button" data-open-test-step="household" data-application-id="${escapeHtml(application.id)}">Household &amp; Residency</button><button class="button primary" type="submit">Save test information</button></div></div>
       </form>
     </section>`;
 }
@@ -491,6 +491,121 @@ async function saveApplicantInformation(form) {
     fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
   } });
   await renderApplicantInformation(applicationId, 'Fictional applicant information saved. The audit history was updated.');
+}
+
+const relationshipLabels = {
+  spouse: 'Spouse', child: 'Child', stepchild: 'Stepchild', parent: 'Parent', stepparent: 'Stepparent', sibling: 'Sibling',
+  caretaker_relative: 'Caretaker relative', other_relative: 'Other relative', unrelated: 'Unrelated person', other: 'Other'
+};
+const taxRelationshipLabels = { tax_filer: 'Files a tax return', joint_filer: 'Files jointly with spouse', tax_dependent: 'Claimed as a tax dependent', non_filer: 'Does not file', not_sure: 'Not sure' };
+const incomeTypeLabels = {
+  employment: 'Employment', self_employment: 'Self-employment', social_security: 'Social Security', ssi: 'SSI', unemployment: 'Unemployment',
+  pension_retirement: 'Pension or retirement', workers_compensation: 'Workers’ compensation', veterans_benefits: 'Veterans benefits',
+  alimony: 'Alimony', rental: 'Rental income', interest_dividends: 'Interest or dividends', other: 'Other income', no_income: 'No income'
+};
+const incomeFrequencyLabels = { hourly: 'Hourly', weekly: 'Weekly', every_two_weeks: 'Every two weeks', twice_monthly: 'Twice monthly', monthly: 'Monthly', quarterly: 'Quarterly', annually: 'Annually', one_time: 'One time' };
+
+async function loadTestApplicationDetails(applicationId) {
+  return adminRequest(`/api/intake/test-applications?applicationId=${encodeURIComponent(applicationId)}`);
+}
+
+function optionList(labels, selectedValue) {
+  return Object.entries(labels).map(([value, label]) => `<option value="${escapeHtml(value)}" ${value === selectedValue ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('');
+}
+
+function fictionalConfirmation() {
+  return '<label class="test-confirmation"><input type="checkbox" name="fictionalConfirmation" required><span>I confirm every value on this form is fictional and does not identify a real person.</span></label>';
+}
+
+async function renderHouseholdResidency(applicationId, notice = '', editMemberId = '') {
+  elements.headerViewName.textContent = 'Household & Residency';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, applicant, residency, householdMembers = [] } = details;
+  const editing = householdMembers.find(member => member.id === editMemberId) || null;
+  const r = (key, fallback = '') => escapeHtml(residency?.[key] ?? fallback);
+  const m = (key, fallback = '') => escapeHtml(editing?.[key] ?? fallback);
+  const mailingSame = residency?.mailing_same !== false;
+
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Household &amp; Residency</h1><p>${escapeHtml(programTitle(application.program_id))} · NCDHHS household and North Carolina residency information</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional information only.</strong><p>Do not enter a real address, household member, pregnancy status, tax relationship, or coverage request.</p></div></div>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 2</span><strong>North Carolina residency</strong></div>
+      <form id="residencyForm" data-application-id="${escapeHtml(application.id)}">
+        <fieldset><legend>Fictional home address</legend><div class="field"><label for="physicalAddress1">Address line 1</label><input id="physicalAddress1" name="physicalAddressLine1" maxlength="160" value="${r('physical_address_line_1')}" required></div><div class="field"><label for="physicalAddress2">Address line 2</label><input id="physicalAddress2" name="physicalAddressLine2" maxlength="160" value="${r('physical_address_line_2')}"></div><div class="three-fields"><div class="field"><label for="physicalCity">City</label><input id="physicalCity" name="physicalCity" maxlength="100" value="${r('physical_city')}" required></div><div class="field"><label for="physicalState">State</label><input id="physicalState" name="physicalState" maxlength="2" value="${r('physical_state', 'NC')}" required></div><div class="field"><label for="physicalZip">ZIP code</label><input id="physicalZip" name="physicalPostalCode" maxlength="10" pattern="[0-9]{5}(-[0-9]{4})?" value="${r('physical_postal_code')}" required></div></div><div class="two-fields"><div class="field"><label for="residencyCounty">NC county</label><input id="residencyCounty" name="ncCounty" maxlength="80" value="${r('nc_county', applicant?.nc_county || '')}" required></div><div class="field"><label for="livesInNc">Lives in North Carolina?</label><select id="livesInNc" name="livesInNc"><option value="true" ${residency?.lives_in_nc !== false ? 'selected' : ''}>Yes</option><option value="false" ${residency?.lives_in_nc === false ? 'selected' : ''}>No</option></select></div></div><label class="check-row"><input type="checkbox" name="temporarilyAbsent" ${residency?.temporarily_absent ? 'checked' : ''}><span>Fictional applicant is temporarily absent from the home address</span></label></fieldset>
+        <fieldset><legend>Fictional mailing address</legend><label class="check-row"><input id="mailingSame" type="checkbox" name="mailingSame" ${mailingSame ? 'checked' : ''}><span>Mailing address is the same as the home address</span></label><div data-mailing-fields ${mailingSame ? 'hidden' : ''}><div class="field"><label for="mailingAddress1">Address line 1</label><input id="mailingAddress1" name="mailingAddressLine1" maxlength="160" value="${r('mailing_address_line_1')}"></div><div class="field"><label for="mailingAddress2">Address line 2</label><input id="mailingAddress2" name="mailingAddressLine2" maxlength="160" value="${r('mailing_address_line_2')}"></div><div class="three-fields"><div class="field"><label for="mailingCity">City</label><input id="mailingCity" name="mailingCity" maxlength="100" value="${r('mailing_city')}"></div><div class="field"><label for="mailingState">State</label><input id="mailingState" name="mailingState" maxlength="2" value="${r('mailing_state', 'NC')}"></div><div class="field"><label for="mailingZip">ZIP code</label><input id="mailingZip" name="mailingPostalCode" maxlength="10" pattern="[0-9]{5}(-[0-9]{4})?" value="${r('mailing_postal_code')}"></div></div></div></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="applicant" data-application-id="${escapeHtml(application.id)}">Back to applicant</button><button class="button primary" type="submit">Save residency</button></div>
+      </form>
+    </section>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 2</span><strong>Additional household members</strong></div>
+      ${householdMembers.length ? `<div class="record-list">${householdMembers.map(member => `<article><div><strong>${escapeHtml(member.first_name)} ${escapeHtml(member.last_name)}</strong><span>${escapeHtml(relationshipLabels[member.relationship_to_applicant] || member.relationship_to_applicant)} · ${member.applying_for_coverage ? 'Applying' : 'Not applying'} · ${escapeHtml(taxRelationshipLabels[member.tax_relationship] || member.tax_relationship)}</span></div><div><button type="button" data-edit-household-member="${escapeHtml(member.id)}" data-application-id="${escapeHtml(application.id)}">Edit</button><button type="button" data-delete-household-member="${escapeHtml(member.id)}" data-application-id="${escapeHtml(application.id)}">Remove</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No additional fictional household members have been added.</p>'}
+      <form id="householdMemberForm" data-application-id="${escapeHtml(application.id)}" data-member-id="${escapeHtml(editing?.id || '')}">
+        <fieldset><legend>${editing ? 'Edit' : 'Add'} fictional household member</legend><div class="three-fields"><div class="field"><label for="memberFirstName">First name</label><input id="memberFirstName" name="firstName" maxlength="80" value="${m('first_name')}" required></div><div class="field"><label for="memberLastName">Last name</label><input id="memberLastName" name="lastName" maxlength="80" value="${m('last_name')}" required></div><div class="field"><label for="memberDob">Date of birth</label><input id="memberDob" name="dateOfBirth" type="date" max="${new Date().toISOString().slice(0, 10)}" value="${m('date_of_birth')}" required></div></div><div class="two-fields"><div class="field"><label for="memberRelationship">Relationship to applicant</label><select id="memberRelationship" name="relationship">${optionList(relationshipLabels, editing?.relationship_to_applicant || 'spouse')}</select></div><div class="field"><label for="memberTax">Tax relationship</label><select id="memberTax" name="taxRelationship">${optionList(taxRelationshipLabels, editing?.tax_relationship || 'non_filer')}</select></div></div><div class="three-fields"><div class="field"><label for="memberLivesWith">Lives with applicant?</label><select id="memberLivesWith" name="livesWithApplicant"><option value="true" ${editing?.lives_with_applicant !== false ? 'selected' : ''}>Yes</option><option value="false" ${editing?.lives_with_applicant === false ? 'selected' : ''}>No</option></select></div><div class="field"><label for="memberApplying">Applying for coverage?</label><select id="memberApplying" name="applyingForCoverage"><option value="false" ${editing?.applying_for_coverage !== true ? 'selected' : ''}>No</option><option value="true" ${editing?.applying_for_coverage === true ? 'selected' : ''}>Yes</option></select></div><div class="field"><label for="memberPregnant">Pregnant?</label><select id="memberPregnant" name="pregnant"><option value="false" ${editing?.pregnant !== true ? 'selected' : ''}>No</option><option value="true" ${editing?.pregnant === true ? 'selected' : ''}>Yes</option></select></div></div></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions">${editing ? `<button class="button secondary" type="button" data-open-test-step="household" data-application-id="${escapeHtml(application.id)}">Cancel edit</button>` : '<span></span>'}<button class="button primary" type="submit">${editing ? 'Update' : 'Add'} household member</button></div>
+      </form>
+      <div class="next-step-bar"><div><strong>Next: Income &amp; Employment</strong><p>Add fictional income sources for the applicant and household members.</p></div><button class="button primary" type="button" data-open-test-step="income" data-application-id="${escapeHtml(application.id)}">Continue to income</button></div>
+    </section>`;
+}
+
+async function renderIncomeEmployment(applicationId, notice = '', editSourceId = '') {
+  elements.headerViewName.textContent = 'Income & Employment';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, applicant, householdMembers = [], incomeSources = [] } = details;
+  const editing = incomeSources.find(source => source.id === editSourceId) || null;
+  const primaryName = `${applicant?.legal_first_name || 'Primary'} ${applicant?.legal_last_name || 'applicant'}`.trim();
+  const personName = source => source.household_member_id ? (() => { const member = householdMembers.find(item => item.id === source.household_member_id); return member ? `${member.first_name} ${member.last_name}` : 'Household member'; })() : primaryName;
+  const currency = value => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Income &amp; Employment</h1><p>${escapeHtml(programTitle(application.program_id))} · Collect gross income before taxes without making an eligibility decision.</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Use invented amounts and employers only.</strong><p>Do not enter real wages, Social Security benefits, retirement income, business records, or financial information.</p></div></div>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 3</span><strong>Fictional income sources</strong></div>
+      ${incomeSources.length ? `<div class="record-list">${incomeSources.map(source => `<article><div><strong>${escapeHtml(personName(source))}: ${escapeHtml(incomeTypeLabels[source.source_type] || source.source_type)}</strong><span>${source.source_type === 'no_income' ? 'No income reported' : `${escapeHtml(currency(source.gross_amount))} · ${escapeHtml(incomeFrequencyLabels[source.frequency] || source.frequency)}`}${source.source_name ? ` · ${escapeHtml(source.source_name)}` : ''}</span></div><div><button type="button" data-edit-income-source="${escapeHtml(source.id)}" data-application-id="${escapeHtml(application.id)}">Edit</button><button type="button" data-delete-income-source="${escapeHtml(source.id)}" data-application-id="${escapeHtml(application.id)}">Remove</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No fictional income sources have been added.</p>'}
+      <form id="incomeSourceForm" data-application-id="${escapeHtml(application.id)}" data-source-id="${escapeHtml(editing?.id || '')}">
+        <fieldset><legend>${editing ? 'Edit' : 'Add'} fictional income source</legend><div class="two-fields"><div class="field"><label for="incomePerson">Person receiving income</label><select id="incomePerson" name="householdMemberId"><option value="" ${!editing?.household_member_id ? 'selected' : ''}>${escapeHtml(primaryName)} (primary applicant)</option>${householdMembers.map(member => `<option value="${escapeHtml(member.id)}" ${editing?.household_member_id === member.id ? 'selected' : ''}>${escapeHtml(member.first_name)} ${escapeHtml(member.last_name)}</option>`).join('')}</select></div><div class="field"><label for="incomeType">Income type</label><select id="incomeType" name="sourceType">${optionList(incomeTypeLabels, editing?.source_type || 'employment')}</select></div></div><div class="field"><label for="incomeSourceName">Employer or source name</label><input id="incomeSourceName" name="sourceName" maxlength="160" value="${escapeHtml(editing?.source_name || '')}"></div><div class="three-fields"><div class="field"><label for="incomeAmount">Gross amount</label><input id="incomeAmount" name="grossAmount" type="number" min="0" step="0.01" value="${escapeHtml(editing?.gross_amount ?? '0')}" required></div><div class="field"><label for="incomeFrequency">Frequency</label><select id="incomeFrequency" name="frequency">${optionList(incomeFrequencyLabels, editing?.frequency || 'monthly')}</select></div><div class="field"><label for="incomeHours">Hours per week</label><input id="incomeHours" name="hoursPerWeek" type="number" min="0" max="168" step="0.25" value="${escapeHtml(editing?.hours_per_week ?? '')}"></div></div><label class="check-row"><input type="checkbox" name="expectedToChange" ${editing?.expected_to_change ? 'checked' : ''}><span>This fictional income is expected to change</span></label></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="household" data-application-id="${escapeHtml(application.id)}">Back to household</button><div>${editing ? `<button class="button secondary" type="button" data-open-test-step="income" data-application-id="${escapeHtml(application.id)}">Cancel edit</button>` : ''}<button class="button primary" type="submit">${editing ? 'Update' : 'Add'} income source</button></div></div>
+      </form>
+    </section>
+    <div class="policy-notice">MMS Connect does not compare these test amounts with an income limit or decide eligibility. Current NCDHHS policy tables and a county DSS determination control the official result.</div>`;
+}
+
+async function saveResidency(form) {
+  const values = new FormData(form);
+  const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_residency', applicationId, physicalAddressLine1: values.get('physicalAddressLine1'), physicalAddressLine2: values.get('physicalAddressLine2'),
+    physicalCity: values.get('physicalCity'), physicalState: values.get('physicalState'), physicalPostalCode: values.get('physicalPostalCode'), ncCounty: values.get('ncCounty'),
+    livesInNc: values.get('livesInNc') === 'true', temporarilyAbsent: values.get('temporarilyAbsent') === 'on', mailingSame: values.get('mailingSame') === 'on',
+    mailingAddressLine1: values.get('mailingAddressLine1'), mailingAddressLine2: values.get('mailingAddressLine2'), mailingCity: values.get('mailingCity'), mailingState: values.get('mailingState'), mailingPostalCode: values.get('mailingPostalCode'),
+    fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderHouseholdResidency(applicationId, 'Fictional residency information saved.');
+}
+
+async function saveHouseholdMember(form) {
+  const values = new FormData(form);
+  const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_household_member', applicationId, memberId: form.dataset.memberId || '', firstName: values.get('firstName'), lastName: values.get('lastName'), dateOfBirth: values.get('dateOfBirth'),
+    relationship: values.get('relationship'), taxRelationship: values.get('taxRelationship'), livesWithApplicant: values.get('livesWithApplicant') === 'true', applyingForCoverage: values.get('applyingForCoverage') === 'true', pregnant: values.get('pregnant') === 'true', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderHouseholdResidency(applicationId, `Fictional household member ${form.dataset.memberId ? 'updated' : 'added'}.`);
+}
+
+async function saveIncomeSource(form) {
+  const values = new FormData(form);
+  const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_income_source', applicationId, sourceId: form.dataset.sourceId || '', householdMemberId: values.get('householdMemberId'), sourceType: values.get('sourceType'), sourceName: values.get('sourceName'), grossAmount: values.get('grossAmount'), frequency: values.get('frequency'), hoursPerWeek: values.get('hoursPerWeek'), expectedToChange: values.get('expectedToChange') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderIncomeEmployment(applicationId, `Fictional income source ${form.dataset.sourceId ? 'updated' : 'added'}.`);
 }
 
 function renderPlaceholder(view) {
@@ -571,6 +686,34 @@ function wireInterface() {
     const resumeTestButton = event.target.closest('[data-resume-test-application]');
     if (resumeTestButton) return void renderApplicantInformation(resumeTestButton.dataset.resumeTestApplication).catch(error => window.alert(error.message));
     if (event.target.closest('[data-back-intake-programs]')) return void renderApplications();
+    const stepButton = event.target.closest('[data-open-test-step]');
+    if (stepButton) {
+      const applicationId = stepButton.dataset.applicationId;
+      const step = stepButton.dataset.openTestStep;
+      if (step === 'applicant') return void renderApplicantInformation(applicationId).catch(error => window.alert(error.message));
+      if (step === 'household') return void renderHouseholdResidency(applicationId).catch(error => window.alert(error.message));
+      if (step === 'income') return void renderIncomeEmployment(applicationId).catch(error => window.alert(error.message));
+    }
+    const editMemberButton = event.target.closest('[data-edit-household-member]');
+    if (editMemberButton) return void renderHouseholdResidency(editMemberButton.dataset.applicationId, '', editMemberButton.dataset.editHouseholdMember).catch(error => window.alert(error.message));
+    const deleteMemberButton = event.target.closest('[data-delete-household-member]');
+    if (deleteMemberButton) {
+      if (!window.confirm('Remove this fictional household member and any linked fictional income sources?')) return;
+      deleteMemberButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_household_member', applicationId: deleteMemberButton.dataset.applicationId, memberId: deleteMemberButton.dataset.deleteHouseholdMember, fictionalConfirmation: true } })
+        .then(() => renderHouseholdResidency(deleteMemberButton.dataset.applicationId, 'Fictional household member removed.'))
+        .catch(error => { deleteMemberButton.disabled = false; window.alert(error.message); });
+    }
+    const editIncomeButton = event.target.closest('[data-edit-income-source]');
+    if (editIncomeButton) return void renderIncomeEmployment(editIncomeButton.dataset.applicationId, '', editIncomeButton.dataset.editIncomeSource).catch(error => window.alert(error.message));
+    const deleteIncomeButton = event.target.closest('[data-delete-income-source]');
+    if (deleteIncomeButton) {
+      if (!window.confirm('Remove this fictional income source?')) return;
+      deleteIncomeButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_income_source', applicationId: deleteIncomeButton.dataset.applicationId, sourceId: deleteIncomeButton.dataset.deleteIncomeSource, fictionalConfirmation: true } })
+        .then(() => renderIncomeEmployment(deleteIncomeButton.dataset.applicationId, 'Fictional income source removed.'))
+        .catch(error => { deleteIncomeButton.disabled = false; window.alert(error.message); });
+    }
     const adminButton = event.target.closest('[data-admin-action]');
     if (!adminButton) return;
     const action = adminButton.dataset.adminAction;
@@ -590,6 +733,27 @@ function wireInterface() {
       setBusy(form, true);
       return void saveApplicantInformation(form).catch(error => { setBusy(form, false); window.alert(error.message); });
     }
+    if (event.target.id === 'residencyForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      setBusy(form, true);
+      return void saveResidency(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'householdMemberForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      setBusy(form, true);
+      return void saveHouseholdMember(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'incomeSourceForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      setBusy(form, true);
+      return void saveIncomeSource(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
     if (event.target.id !== 'inviteStaffForm') return;
     event.preventDefault();
     const form = event.target;
@@ -599,6 +763,12 @@ function wireInterface() {
     adminRequest('/api/admin/invite-staff', { method: 'POST', body: { firstName: values.get('firstName'), lastName: values.get('lastName'), email: values.get('email'), role: values.get('role') } })
       .then(() => renderStaffManagement('The secure staff invitation was sent.'))
       .catch(error => { setBusy(form, false); window.alert(error.message); });
+  });
+  elements.dashboardContent.addEventListener('change', event => {
+    if (event.target.id === 'mailingSame') {
+      const fields = elements.dashboardContent.querySelector('[data-mailing-fields]');
+      if (fields) fields.hidden = event.target.checked;
+    }
   });
   document.getElementById('menuButton').addEventListener('click', () => elements.dashboard.classList.toggle('nav-open'));
   document.getElementById('signOutButton').addEventListener('click', async () => {

@@ -119,7 +119,7 @@ async function loadConfiguration() {
 async function loadProfile(user) {
   const { data, error } = await supabaseClient
     .from('profiles')
-    .select('id, first_name, last_name, account_type, status, created_at')
+    .select('id, first_name, last_name, organization_name, account_type, status, created_at')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -128,8 +128,9 @@ async function loadProfile(user) {
     id: user.id,
     first_name: user.user_metadata?.first_name || '',
     last_name: user.user_metadata?.last_name || '',
+    organization_name: user.user_metadata?.organization_name || '',
     account_type: user.user_metadata?.account_type || 'client',
-    status: 'active',
+    status: isOrganizationType(user.user_metadata?.account_type) ? 'pending' : 'active',
     created_at: user.created_at
   };
 }
@@ -138,9 +139,25 @@ function roleLabel(role) {
   return ({
     client: 'Client',
     authorized_representative: 'Authorized Representative',
+    agency: 'Agency',
+    facility: 'Facility',
     staff: 'MMS Staff',
     administrator: 'Administrator'
   })[role] || 'Client';
+}
+
+function isOrganizationType(accountType) {
+  return accountType === 'agency' || accountType === 'facility';
+}
+
+function syncOrganizationField() {
+  const selectedType = document.querySelector('input[name="accountType"]:checked')?.value;
+  const field = document.getElementById('organizationNameField');
+  const input = document.getElementById('organizationName');
+  const organizationSelected = isOrganizationType(selectedType);
+  field.hidden = !organizationSelected;
+  input.required = organizationSelected;
+  if (!organizationSelected) input.value = '';
 }
 
 function getDisplayName() {
@@ -150,7 +167,17 @@ function getDisplayName() {
 
 function renderHome() {
   const firstName = currentProfile?.first_name || 'there';
+  const verificationPending = isOrganizationType(currentProfile?.account_type) && currentProfile?.status === 'pending';
   elements.headerViewName.textContent = 'Home';
+  if (verificationPending) {
+    elements.dashboardContent.innerHTML = `
+      <section class="welcome">
+        <div><p class="eyebrow">Welcome to MMS Connect</p><h1>Hello, ${escapeHtml(firstName)}.</h1><p>Your ${escapeHtml(roleLabel(currentProfile?.account_type).toLowerCase())} account has been created and is awaiting MMS verification.</p></div>
+        <span class="status-pill">Verification pending</span>
+      </section>
+      <div class="safety-banner"><span aria-hidden="true">i</span><div><strong>No confidential submissions yet.</strong><p>MMS will contact your organization after review. Do not enter client, medical, financial, or Medicaid information during this stage.</p></div></div>`;
+    return;
+  }
   elements.dashboardContent.innerHTML = `
     <section class="welcome">
       <div><p class="eyebrow">Welcome to MMS Connect</p><h1>Hello, ${escapeHtml(firstName)}.</h1><p>Your account is ready. The next platform features will appear here as they complete security and privacy review.</p></div>
@@ -177,6 +204,7 @@ function renderProfile() {
     <section class="profile-card">
       <dl class="profile-list">
         <dt>Name</dt><dd>${escapeHtml(getDisplayName())}</dd>
+        ${currentProfile?.organization_name ? `<dt>Organization</dt><dd>${escapeHtml(currentProfile.organization_name)}</dd>` : ''}
         <dt>Email</dt><dd>${escapeHtml(currentUser?.email)}</dd>
         <dt>Account type</dt><dd>${escapeHtml(roleLabel(currentProfile?.account_type))}</dd>
         <dt>Email status</dt><dd>${currentUser?.email_confirmed_at ? 'Verified' : 'Verification pending'}</dd>
@@ -206,7 +234,8 @@ async function showDashboard(user) {
   currentUser = user;
   currentProfile = await loadProfile(user);
 
-  if (currentProfile?.status && currentProfile.status !== 'active') {
+  const organizationPending = isOrganizationType(currentProfile?.account_type) && currentProfile?.status === 'pending';
+  if (currentProfile?.status && currentProfile.status !== 'active' && !organizationPending) {
     await supabaseClient.auth.signOut({ scope: 'local' });
     showAuthView('signin');
     showMessage('signin', 'This account is not active. Contact MMS Connect support for assistance.');
@@ -223,6 +252,9 @@ async function showDashboard(user) {
 
 function wireInterface() {
   document.querySelectorAll('[data-current-year]').forEach(node => { node.textContent = new Date().getFullYear(); });
+
+  document.querySelectorAll('input[name="accountType"]').forEach(input => input.addEventListener('change', syncOrganizationField));
+  syncOrganizationField();
 
   window.addEventListener('hashchange', () => {
     if (!currentUser) showAuthView();
@@ -283,6 +315,7 @@ function wireInterface() {
         data: {
           first_name: values.get('firstName').trim(),
           last_name: values.get('lastName').trim(),
+          organization_name: values.get('organizationName').trim(),
           account_type: values.get('accountType')
         }
       }
@@ -290,6 +323,7 @@ function wireInterface() {
     setBusy(form, false);
     if (error) return showMessage('register', friendlyAuthError(error));
     form.reset();
+    syncOrganizationField();
     if (data.session) await showDashboard(data.user);
     else showMessage('register', 'Check your email to verify your address, then return here to sign in.', 'success');
   });

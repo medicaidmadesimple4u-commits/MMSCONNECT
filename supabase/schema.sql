@@ -8,14 +8,24 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   first_name text not null check (char_length(first_name) between 1 and 80),
   last_name text not null check (char_length(last_name) between 1 and 80),
+  organization_name text check (organization_name is null or char_length(organization_name) between 2 and 160),
   account_type text not null default 'client'
-    check (account_type in ('client', 'authorized_representative', 'staff', 'administrator')),
+    check (account_type in ('client', 'authorized_representative', 'agency', 'facility', 'staff', 'administrator')),
   status text not null default 'active'
     check (status in ('pending', 'active', 'suspended', 'closed')),
   phone text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+  add column if not exists organization_name text
+  check (organization_name is null or char_length(organization_name) between 2 and 160);
+
+alter table public.profiles drop constraint if exists profiles_account_type_check;
+alter table public.profiles
+  add constraint profiles_account_type_check
+  check (account_type in ('client', 'authorized_representative', 'agency', 'facility', 'staff', 'administrator'));
 
 alter table public.profiles enable row level security;
 
@@ -28,16 +38,22 @@ declare
   requested_type text;
 begin
   requested_type := new.raw_user_meta_data ->> 'account_type';
-  if requested_type is null or requested_type not in ('client', 'authorized_representative') then
+  if requested_type is null or requested_type not in ('client', 'authorized_representative', 'agency', 'facility') then
     requested_type := 'client';
   end if;
 
-  insert into public.profiles (id, first_name, last_name, account_type)
+  insert into public.profiles (id, first_name, last_name, organization_name, account_type, status)
   values (
     new.id,
     left(coalesce(nullif(trim(new.raw_user_meta_data ->> 'first_name'), ''), 'MMS'), 80),
     left(coalesce(nullif(trim(new.raw_user_meta_data ->> 'last_name'), ''), 'Connect User'), 80),
-    requested_type
+    case
+      when requested_type in ('agency', 'facility')
+        then left(nullif(trim(new.raw_user_meta_data ->> 'organization_name'), ''), 160)
+      else null
+    end,
+    requested_type,
+    case when requested_type in ('agency', 'facility') then 'pending' else 'active' end
   )
   on conflict (id) do nothing;
 
@@ -85,8 +101,10 @@ revoke all on table public.profiles from anon;
 revoke insert, delete on table public.profiles from authenticated;
 revoke update on table public.profiles from authenticated;
 grant select on table public.profiles to authenticated;
-grant update (first_name, last_name, phone) on table public.profiles to authenticated;
+grant update (first_name, last_name, organization_name, phone) on table public.profiles to authenticated;
 
--- Account type, status, staff, and administrator access must be changed only by a
--- trusted server-side administrative workflow using the service role. Never expose
+-- Staff and administrator access must be changed only by a trusted server-side
+-- administrative workflow. Agency and facility accounts may self-register only
+-- with pending status and must be verified before organization features are enabled.
+-- Account type and status remain protected from browser updates. Never expose
 -- the service-role key in browser code or Vercel client variables.

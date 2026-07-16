@@ -95,7 +95,20 @@
               <input type="radio" name="accountType" value="authorized_representative">
               <span><strong>Authorized Representative</strong><small>I assist another person with their permission or legal authority.</small></span>
             </label>
+            <label class="choice-card">
+              <input type="radio" name="accountType" value="agency">
+              <span><strong>Agency</strong><small>I represent a home health, hospice, adult day, or community-based organization.</small></span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="accountType" value="facility">
+              <span><strong>Facility</strong><small>I represent a nursing facility or another residential care provider.</small></span>
+            </label>
           </fieldset>
+          <div id="organizationNameField" class="field" hidden>
+            <label for="organizationName">Agency or facility name</label>
+            <input id="organizationName" name="organizationName" autocomplete="organization" maxlength="160">
+            <small class="field-help">Organization accounts are reviewed before organization features are enabled.</small>
+          </div>
           <div class="two-fields">
             <div class="field">
               <label for="firstName">First name</label>

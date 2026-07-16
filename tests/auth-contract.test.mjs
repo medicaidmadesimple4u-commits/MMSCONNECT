@@ -18,6 +18,9 @@ test('authentication page contains required account flows', async () => {
   }
   assert.match(html, /value="client"/);
   assert.match(html, /value="authorized_representative"/);
+  assert.match(html, /value="agency"/);
+  assert.match(html, /value="facility"/);
+  assert.match(html, /id="organizationName"/);
   assert.doesNotMatch(html, /value="administrator"/);
 });
 
@@ -32,9 +35,11 @@ test('browser auth uses supported Supabase operations', async () => {
 test('database schema enables RLS and prevents privileged self-registration', async () => {
   const sql = await read('supabase/schema.sql');
   assert.match(sql, /enable row level security/i);
-  assert.match(sql, /requested_type is null or requested_type not in \('client', 'authorized_representative'\)/i);
+  assert.match(sql, /requested_type is null or requested_type not in \('client', 'authorized_representative', 'agency', 'facility'\)/i);
+  assert.match(sql, /case when requested_type in \('agency', 'facility'\) then 'pending' else 'active' end/i);
+  assert.doesNotMatch(sql, /requested_type not in \([^)]*staff/i);
   assert.match(sql, /revoke update on table public\.profiles from authenticated/i);
-  assert.match(sql, /grant update \(first_name, last_name, phone\)/i);
+  assert.match(sql, /grant update \(first_name, last_name, organization_name, phone\)/i);
 });
 
 test('Vercel configuration applies baseline browser security headers', async () => {

@@ -21,6 +21,8 @@ test('authentication page contains required account flows', async () => {
   assert.match(html, /value="agency"/);
   assert.match(html, /value="facility"/);
   assert.match(html, /id="organizationName"/);
+  assert.match(html, /href="\/terms\.html"/);
+  assert.match(html, /href="\/privacy\.html"/);
   assert.doesNotMatch(html, /value="staff"/);
   assert.doesNotMatch(html, /value="administrator"/);
 });
@@ -38,6 +40,20 @@ test('browser auth uses supported Supabase operations', async () => {
   assert.match(script, /\['applications', 'I', 'Intake Programs'\]/);
   assert.match(script, /else if \(view === 'applications'\) void renderApplications\(\)/);
   assert.doesNotMatch(script, /service[_-]?role/i);
+  assert.match(script, /terms_accepted: true/);
+  assert.match(script, /intakeMode === 'official_guide'/);
+});
+
+test('production exposes an official guide and disables fictional intake', async () => {
+  const [config, script, intake, privacy, terms] = await Promise.all([
+    read('api/config.js'), read('auth.js'), read('api/intake/test-applications.js'), read('privacy.html'), read('terms.html')
+  ]);
+  assert.match(config, /deploymentMode === 'production' \? 'official_guide' : 'fictional_test'/);
+  assert.match(intake, /Test intake is not available in production/);
+  assert.match(script, /Apply through ePASS/);
+  assert.match(script, /Find county DSS/);
+  assert.match(privacy, /This release does not accept Medicaid applications/);
+  assert.match(terms, /No official application submission/);
 });
 
 test('policy-guided intake covers the principal NCDHHS pathways', async () => {
@@ -140,6 +156,16 @@ test('database schema enables RLS and prevents privileged self-registration', as
   assert.match(sql, /create table if not exists public\.admin_audit_log/i);
   assert.match(sql, /alter table public\.admin_audit_log enable row level security/i);
   assert.match(sql, /revoke all on table public\.admin_audit_log from anon, authenticated/i);
+});
+
+test('new account consent is versioned and server-recorded', async () => {
+  const sql = await read('supabase/migrations/20260716233000_record_account_terms_consent.sql');
+  assert.match(sql, /create table if not exists public\.account_consents/i);
+  assert.match(sql, /after insert on auth\.users/i);
+  assert.match(sql, /terms_version/i);
+  assert.match(sql, /privacy_version/i);
+  assert.match(sql, /alter table public\.account_consents enable row level security/i);
+  assert.match(sql, /revoke all on public\.account_consents from anon, authenticated/i);
 });
 
 test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {

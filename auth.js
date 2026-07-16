@@ -16,6 +16,8 @@ const elements = {
 let supabaseClient;
 let currentUser;
 let currentProfile;
+let deploymentMode = 'staging';
+let intakeMode = 'official_guide';
 
 const dashboardViews = {
   applications: {
@@ -390,12 +392,13 @@ function renderTestApplicationList(applications) {
 }
 
 async function renderApplications(selectedProgramId = '', notice = '') {
-  elements.headerViewName.textContent = 'Applications';
+  const guideOnly = intakeMode === 'official_guide';
+  elements.headerViewName.textContent = guideOnly ? 'Program Guide & Forms' : 'Applications';
   const groups = [...new Set(medicaidPrograms.map(program => program.group))];
   const selected = getProgram(selectedProgramId);
   const checklist = selected ? getProgramSections(selected.id) : [];
   const sources = selected ? getProgramSources(selected.id) : [];
-  const canRunTest = isPrivilegedRole(currentProfile?.account_type);
+  const canRunTest = intakeMode === 'fictional_test' && isPrivilegedRole(currentProfile?.account_type);
   let testApplications = [];
   let testLoadError = '';
   if (canRunTest) {
@@ -406,11 +409,11 @@ async function renderApplications(selectedProgramId = '', notice = '') {
   elements.dashboardContent.innerHTML = `
     <section class="content-heading">
       <p class="eyebrow">NCDHHS policy guide</p>
-      <h1>Choose an intake pathway</h1>
-      <p>This preview maps each NC Medicaid pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.</p>
+      <h1>${guideOnly ? 'Explore programs and official forms' : 'Choose an intake pathway'}</h1>
+      <p>${guideOnly ? 'Use this guide to understand common NC Medicaid pathways, then apply securely through NC ePASS or your county Department of Social Services.' : 'This preview maps each NC Medicaid pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.'}</p>
     </section>
     ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
-    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Preview with test scenarios only.</strong><p>Public intake remains disabled. Only active MMS staff and administrators may save completely fictional staging records for security testing.</p></div></div>
+    <div class="safety-banner"><span aria-hidden="true">${guideOnly ? 'i' : '!'}</span><div><strong>${guideOnly ? 'Official application handoff.' : 'Preview with test scenarios only.'}</strong><p>${guideOnly ? 'MMS Connect does not collect your Medicaid application or confidential documents in this release. Use the official ePASS or DSS links below.' : 'Public intake remains disabled. Only active MMS staff and administrators may save completely fictional staging records for security testing.'}</p></div></div>
     ${canRunTest ? `<section class="test-application-panel"><div><p class="eyebrow">Staging security test</p><h2>Fictional test applications</h2><p>Only active MMS staff and administrators can create these staging-only records.</p></div>${testLoadError ? `<div class="form-message error">${escapeHtml(testLoadError)}</div>` : renderTestApplicationList(testApplications)}</section>` : ''}
     <section class="policy-summary" aria-label="Policy release information">
       <div><span>Policy set</span><strong>NCDHHS ${escapeHtml(policyRelease.version)}</strong></div>
@@ -440,7 +443,8 @@ async function renderApplications(selectedProgramId = '', notice = '') {
         <ol class="intake-section-list">
           ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${policyReferenceLinks(section.policy)}</small></div></li>`).join('')}
         </ol>
-        ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the first protected screen</strong><p>Create a staging-only draft and use fictional information to test save and resume.</p></div><button class="button primary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start fictional test</button></div>` : ''}
+        ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the protected workflow</strong><p>Create a staging-only draft and use fictional information to test save and resume.</p></div><button class="button primary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start fictional test</button></div>` : ''}
+        ${guideOnly ? `<div class="intake-test-action"><div><strong>Ready to apply?</strong><p>Continue through an official North Carolina application channel. MMS Connect does not transmit an application to the State.</p></div><div class="official-actions"><a class="button primary" href="https://epass.nc.gov/" target="_blank" rel="noopener noreferrer">Apply through ePASS</a><a class="button secondary" href="https://www.ncdhhs.gov/divisions/social-services/local-dss-directory" target="_blank" rel="noopener noreferrer">Find county DSS</a></div></div>` : ''}
         <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><h3>Official NC Medicaid and DSS forms</h3><div class="official-form-grid">${dssForms.map(form => `<a href="${escapeHtml(form.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(form.title)}</strong><span>Open official form ↗</span></a>`).join('')}</div><p>Income and resource standards change. MMS Connect links to current official sources instead of treating a displayed amount as an eligibility decision.</p></div>
       </section>` : ''}`;
 
@@ -1048,7 +1052,10 @@ function wireInterface() {
           first_name: values.get('firstName').trim(),
           last_name: values.get('lastName').trim(),
           organization_name: values.get('organizationName').trim(),
-          account_type: values.get('accountType')
+          account_type: values.get('accountType'),
+          terms_accepted: true,
+          terms_version: '2026-07-16',
+          privacy_version: '2026-07-16'
         }
       }
     });
@@ -1097,6 +1104,9 @@ async function initialize() {
   showOnly('loading');
   const configuration = await loadConfiguration();
   if (!configuration) return showOnly('configuration');
+
+  deploymentMode = configuration.deploymentMode || 'staging';
+  intakeMode = configuration.intakeMode || (deploymentMode === 'production' ? 'official_guide' : 'fictional_test');
 
   supabaseClient = createClient(configuration.supabaseUrl, configuration.supabasePublishableKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }

@@ -72,6 +72,8 @@ async function auditStatus(applicationId, actorId, action) {
 
 export default async function handler(request, response) {
   if (!requireMethod(request, response, ['GET', 'POST'])) return;
+  const targetEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || 'development';
+  if (targetEnvironment === 'production' && process.env.MMS_TEST_INTAKE_ENABLED !== 'true') return sendJson(response, 404, { error: 'Test intake is not available in production.' });
   if (request.method === 'POST' && !requireAllowedOrigin(request, response)) return;
   try {
     const staff = await requirePrivilegedUser(request);

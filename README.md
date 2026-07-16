@@ -13,6 +13,8 @@ MMS Connect is the client and authorized-representative portal for Medicaid Made
 - NCDHHS policy-guided intake pathway preview
 - Staging-only fictional intake through resources, living arrangement, insurance, authorized representative, review, submission, and administrator queue
 - Staff-only fictional intake testing with protected save and resume
+- Production-safe account and program-guidance mode with official ePASS, NCDHHS form, and county DSS handoffs
+- Versioned Terms of Use and Privacy Notice acceptance for new accounts
 - Fictional Household & Residency and Income & Employment workflows
 - Applications, Documents, Messages, Community Referrals, Profile, and Settings navigation
 - Confidential-data collection intentionally disabled
@@ -38,7 +40,7 @@ The publishable key is intended for browser use and is returned by `api/config.j
 
 ## Protected-data boundary
 
-This authentication release is not approved to collect Social Security numbers, medical information, financial records, Medicaid applications, or documents. Those features remain disabled until the production environment, vendor agreements, access policies, audit controls, retention procedures, and security review are complete.
+The production account portal is approved only for account identity, organization verification, program guidance, and official application handoffs. It does not collect Social Security numbers, medical information, financial records, Medicaid applications, or documents. Those features remain disabled until the dedicated protected-data environment, vendor agreements, access policies, audit controls, retention procedures, and security review are complete.
 
 The program-to-question mapping is documented in [docs/NCDHHS_POLICY_MAP.md](docs/NCDHHS_POLICY_MAP.md). The intake preview uses official NCDHHS manuals and current 2026 limit-table sources without making an eligibility determination or saving confidential answers.
 

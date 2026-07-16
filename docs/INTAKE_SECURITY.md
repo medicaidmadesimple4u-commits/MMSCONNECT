@@ -28,4 +28,8 @@ The first protected-intake build is a staging-only security test. It is not appr
 - Document uploads
 - Production access to the intake interface
 
+## Production guide mode
+
+Production exposes account registration, role-based dashboards, program guidance, official NCDHHS/DSS forms, ePASS, and the county DSS directory. The server rejects the fictional test-intake endpoint in production, and the browser does not display staging test controls. This mode is useful to clients and organizations without accepting confidential application data.
+
 Before real intake is enabled, MMS must approve its privacy and security policies, vendor agreements, access review process, retention schedule, incident response plan, staff training, and production data-handling controls.

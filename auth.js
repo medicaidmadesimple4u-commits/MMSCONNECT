@@ -376,15 +376,8 @@ function programTitle(programId) {
 
 async function loadOwnedTestApplications() {
   if (!isPrivilegedRole(currentProfile?.account_type)) return [];
-  const { data, error } = await supabaseClient
-    .from('applications')
-    .select('id, program_id, status, policy_version, created_at, updated_at')
-    .eq('owner_id', currentUser.id)
-    .eq('environment', 'staging')
-    .eq('test_mode', true)
-    .order('updated_at', { ascending: false });
-  if (error) throw error;
-  return data || [];
+  const { applications } = await adminRequest('/api/intake/test-applications');
+  return applications || [];
 }
 
 function renderTestApplicationList(applications) {
@@ -453,34 +446,14 @@ async function renderApplications(selectedProgramId = '', notice = '') {
 async function startTestApplication(programId) {
   const program = getProgram(programId);
   if (!program || !isPrivilegedRole(currentProfile?.account_type)) throw new Error('This test pathway is not available.');
-  const { data, error } = await supabaseClient.from('applications').insert({
-    owner_id: currentUser.id,
-    program_id: program.id,
-    status: 'draft',
-    policy_version: policyRelease.version,
-    environment: 'staging',
-    test_mode: true
-  }).select('id').single();
-  if (error) throw error;
-  await renderApplicantInformation(data.id);
+  const { application } = await adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'create', programId: program.id } });
+  await renderApplicantInformation(application.id);
 }
 
 async function renderApplicantInformation(applicationId, notice = '') {
   elements.headerViewName.textContent = 'Applicant Information';
-  const { data: application, error: applicationError } = await supabaseClient
-    .from('applications')
-    .select('id, program_id, status, policy_version, environment, test_mode')
-    .eq('id', applicationId)
-    .single();
-  if (applicationError || !application?.test_mode || application.environment !== 'staging') throw new Error('The test application could not be opened.');
-
-  const { data: applicant, error: applicantError } = await supabaseClient
-    .from('application_applicants')
-    .select('legal_first_name, legal_middle_name, legal_last_name, preferred_name, date_of_birth, contact_email, phone, preferred_language, nc_county, applying_for_coverage')
-    .eq('application_id', application.id)
-    .eq('person_order', 1)
-    .maybeSingle();
-  if (applicantError) throw applicantError;
+  const { application, applicant } = await adminRequest(`/api/intake/test-applications?applicationId=${encodeURIComponent(applicationId)}`);
+  if (!application?.test_mode || application.environment !== 'staging') throw new Error('The test application could not be opened.');
 
   const value = (key, fallback = '') => escapeHtml(applicant?.[key] ?? fallback);
   elements.dashboardContent.innerHTML = `
@@ -502,23 +475,21 @@ async function renderApplicantInformation(applicationId, notice = '') {
 async function saveApplicantInformation(form) {
   const values = new FormData(form);
   const applicationId = form.dataset.applicationId;
-  const payload = {
-    application_id: applicationId,
-    person_order: 1,
-    legal_first_name: values.get('legalFirstName').trim(),
-    legal_middle_name: values.get('legalMiddleName').trim() || null,
-    legal_last_name: values.get('legalLastName').trim(),
-    preferred_name: values.get('preferredName').trim() || null,
-    date_of_birth: values.get('dateOfBirth'),
-    contact_email: values.get('contactEmail').trim() || null,
-    phone: values.get('phone').trim() || null,
-    preferred_language: values.get('preferredLanguage').trim(),
-    nc_county: values.get('ncCounty').trim() || null,
-    applying_for_coverage: values.get('applyingForCoverage') === 'true',
-    created_by: currentUser.id
-  };
-  const { error } = await supabaseClient.from('application_applicants').upsert(payload, { onConflict: 'application_id,person_order' });
-  if (error) throw error;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_applicant',
+    applicationId,
+    legalFirstName: values.get('legalFirstName').trim(),
+    legalMiddleName: values.get('legalMiddleName').trim(),
+    legalLastName: values.get('legalLastName').trim(),
+    preferredName: values.get('preferredName').trim(),
+    dateOfBirth: values.get('dateOfBirth'),
+    contactEmail: values.get('contactEmail').trim(),
+    phone: values.get('phone').trim(),
+    preferredLanguage: values.get('preferredLanguage').trim(),
+    ncCounty: values.get('ncCounty').trim(),
+    applyingForCoverage: values.get('applyingForCoverage') === 'true',
+    fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
   await renderApplicantInformation(applicationId, 'Fictional applicant information saved. The audit history was updated.');
 }
 

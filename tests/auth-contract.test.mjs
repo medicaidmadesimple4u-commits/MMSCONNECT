@@ -61,7 +61,8 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   assert.match(script, /completely fictional staging records/);
   assert.match(script, /fictionalConfirmation/);
   assert.match(script, /isPrivilegedRole\(currentProfile\?\.account_type\)/);
-  assert.match(script, /application_applicants/);
+  assert.match(script, /\/api\/intake\/test-applications/);
+  assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
 });
@@ -93,9 +94,9 @@ test('database schema enables RLS and prevents privileged self-registration', as
   assert.match(sql, /revoke all on table public\.admin_audit_log from anon, authenticated/i);
 });
 
-test('administrator APIs verify roles and keep privileged credentials server-side', async () => {
-  const [library, accounts, invite, update] = await Promise.all([
-    read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js')
+test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {
+  const [library, accounts, invite, update, intake] = await Promise.all([
+    read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')
   ]);
   assert.match(library, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(library, /profile\.account_type !== 'administrator'/);
@@ -104,6 +105,11 @@ test('administrator APIs verify roles and keep privileged credentials server-sid
   assert.match(invite, /writeAudit/);
   assert.match(update, /targetId === administrator\.user\.id/);
   assert.match(update, /writeAudit/);
+  assert.match(library, /requirePrivilegedUser/);
+  assert.match(intake, /requirePrivilegedUser/);
+  assert.match(intake, /requireAllowedOrigin/);
+  assert.match(intake, /fictionalConfirmation !== true/);
+  assert.match(intake, /serviceRequest\('\/rest\/v1\/applications'/);
   const browserScript = await read('auth.js');
   assert.doesNotMatch(browserScript, /SUPABASE_SERVICE_ROLE_KEY|service[_-]?role/i);
 });

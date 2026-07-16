@@ -37,6 +37,41 @@ const dashboardViews = {
     description: 'Community resources and referral updates will appear here when assigned.',
     empty: 'You do not have any community referrals.'
   },
+  active_clients: {
+    title: 'Active Clients',
+    description: 'Authorized client assignments will appear here after staff data-access controls are enabled.',
+    empty: 'Client access is not enabled in this release.'
+  },
+  pending_applications: {
+    title: 'Pending Applications',
+    description: 'Applications requiring staff action will appear here after secure intake is enabled.',
+    empty: 'Application review is not enabled in this release.'
+  },
+  document_review: {
+    title: 'Documents Awaiting Review',
+    description: 'Protected document-review queues will appear here after compliance approval.',
+    empty: 'Document review is currently disabled.'
+  },
+  tasks: {
+    title: 'Tasks',
+    description: 'Staff assignments, deadlines, and follow-up work will appear here.',
+    empty: 'No staff tasks are available yet.'
+  },
+  reports: {
+    title: 'Reports',
+    description: 'Operational reports will be added after role-based reporting controls are complete.',
+    empty: 'Reporting is not enabled in this release.'
+  },
+  organization_approvals: {
+    title: 'Organization Approvals',
+    description: 'Agency and facility verification requests will be reviewed here.',
+    empty: 'The approval workflow is coming next.'
+  },
+  staff_management: {
+    title: 'Staff Management',
+    description: 'Administrators will invite staff and manage access from this area.',
+    empty: 'The secure staff invitation workflow is coming next.'
+  },
   settings: {
     title: 'Settings',
     description: 'Account security and notification preferences will be managed here.',
@@ -150,6 +185,43 @@ function isOrganizationType(accountType) {
   return accountType === 'agency' || accountType === 'facility';
 }
 
+function isPrivilegedRole(accountType) {
+  return accountType === 'staff' || accountType === 'administrator';
+}
+
+function configureDashboardNavigation() {
+  const role = currentProfile?.account_type;
+  const items = isPrivilegedRole(role)
+    ? [
+        ['home', 'H', 'Staff Home'],
+        ['active_clients', 'C', 'Active Clients'],
+        ['pending_applications', 'A', 'Pending Applications'],
+        ['document_review', 'D', 'Document Review'],
+        ['messages', 'M', 'Messages'],
+        ['tasks', 'T', 'Tasks'],
+        ['reports', 'R', 'Reports'],
+        ...(role === 'administrator' ? [
+          ['organization_approvals', 'O', 'Organization Approvals'],
+          ['staff_management', 'S', 'Staff Management']
+        ] : []),
+        ['profile', 'P', 'Profile'],
+        ['settings', 'G', 'Settings']
+      ]
+    : [
+        ['home', 'H', 'Home'],
+        ['applications', 'A', 'Applications'],
+        ['documents', 'D', 'Documents'],
+        ['messages', 'M', 'Messages'],
+        ['referrals', 'R', 'Community Referrals'],
+        ['profile', 'P', 'Profile'],
+        ['settings', 'S', 'Settings']
+      ];
+
+  document.querySelector('.dashboard-nav').innerHTML = items
+    .map(([view, icon, label], index) => `<button class="${index === 0 ? 'active' : ''}" data-dashboard-view="${view}"><span aria-hidden="true">${icon}</span> ${label}</button>`)
+    .join('');
+}
+
 function syncOrganizationField() {
   const selectedType = document.querySelector('input[name="accountType"]:checked')?.value;
   const field = document.getElementById('organizationNameField');
@@ -167,6 +239,7 @@ function getDisplayName() {
 
 function renderHome() {
   const firstName = currentProfile?.first_name || 'there';
+  const privileged = isPrivilegedRole(currentProfile?.account_type);
   const verificationPending = isOrganizationType(currentProfile?.account_type) && currentProfile?.status === 'pending';
   elements.headerViewName.textContent = 'Home';
   if (verificationPending) {
@@ -176,6 +249,31 @@ function renderHome() {
         <span class="status-pill">Verification pending</span>
       </section>
       <div class="safety-banner"><span aria-hidden="true">i</span><div><strong>No confidential submissions yet.</strong><p>MMS will contact your organization after review. Do not enter client, medical, financial, or Medicaid information during this stage.</p></div></div>`;
+    return;
+  }
+  if (privileged) {
+    const administrator = currentProfile?.account_type === 'administrator';
+    const staffCards = [
+      ['active_clients', 'C', 'Active Clients', 'View authorized client assignments.'],
+      ['pending_applications', 'A', 'Pending Applications', 'Review applications requiring action.'],
+      ['document_review', 'D', 'Documents Awaiting Review', 'Manage the protected document-review queue.'],
+      ['messages', 'M', 'Messages', 'Open secure staff communications.'],
+      ['tasks', 'T', 'Tasks', 'Track assignments and deadlines.'],
+      ['reports', 'R', 'Reports', 'Review operational reporting.'],
+      ...(administrator ? [
+        ['organization_approvals', 'O', 'Organization Approvals', 'Review pending agency and facility accounts.'],
+        ['staff_management', 'S', 'Staff Management', 'Invite staff and manage access.']
+      ] : [])
+    ];
+    elements.dashboardContent.innerHTML = `
+      <section class="welcome">
+        <div><p class="eyebrow">MMS Connect Staff Portal</p><h1>Welcome, ${escapeHtml(firstName)}.</h1><p>You are signed in with ${escapeHtml(roleLabel(currentProfile?.account_type))} access. Protected client-data tools remain disabled until their security review is complete.</p></div>
+        <span class="status-pill">${escapeHtml(roleLabel(currentProfile?.account_type))}</span>
+      </section>
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Do not enter confidential information yet.</strong><p>This staff portal currently contains interface placeholders only. Client records and document access are not enabled.</p></div></div>
+      <section class="dashboard-grid" aria-label="Staff areas">
+        ${staffCards.map(([view, icon, title, text]) => `<article class="dashboard-card"><span class="card-icon">${icon}</span><h2>${title}</h2><p>${text}</p><button type="button" data-open-view="${view}">Open ${title}</button></article>`).join('')}
+      </section>`;
     return;
   }
   elements.dashboardContent.innerHTML = `
@@ -246,6 +344,7 @@ async function showDashboard(user) {
   elements.accountName.textContent = displayName;
   elements.accountRole.textContent = roleLabel(currentProfile?.account_type);
   elements.accountInitials.textContent = displayName.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
+  configureDashboardNavigation();
   showOnly('dashboard');
   openDashboardView('home');
 }
@@ -270,7 +369,10 @@ function wireInterface() {
     });
   });
 
-  document.querySelectorAll('[data-dashboard-view]').forEach(button => button.addEventListener('click', () => openDashboardView(button.dataset.dashboardView)));
+  document.querySelector('.dashboard-nav').addEventListener('click', event => {
+    const button = event.target.closest('[data-dashboard-view]');
+    if (button) openDashboardView(button.dataset.dashboardView);
+  });
   elements.dashboardContent.addEventListener('click', event => {
     const button = event.target.closest('[data-open-view]');
     if (button) openDashboardView(button.dataset.openView);

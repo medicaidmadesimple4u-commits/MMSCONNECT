@@ -21,6 +21,7 @@ test('authentication page contains required account flows', async () => {
   assert.match(html, /value="agency"/);
   assert.match(html, /value="facility"/);
   assert.match(html, /id="organizationName"/);
+  assert.doesNotMatch(html, /value="staff"/);
   assert.doesNotMatch(html, /value="administrator"/);
 });
 
@@ -29,6 +30,9 @@ test('browser auth uses supported Supabase operations', async () => {
   for (const operation of ['signInWithPassword', 'signUp', 'resetPasswordForEmail', 'updateUser', 'signOut']) {
     assert.match(script, new RegExp(operation));
   }
+  assert.match(script, /MMS Connect Staff Portal/);
+  assert.match(script, /organization_approvals/);
+  assert.match(script, /staff_management/);
   assert.doesNotMatch(script, /service[_-]?role/i);
 });
 

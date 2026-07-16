@@ -668,21 +668,42 @@ async function renderCoverageRepresentative(applicationId, notice = '', editCove
         ${fictionalConfirmation()}
         <div class="intake-form-actions"><span></span><button class="button primary" type="submit">Save representative choice</button></div>
       </form>
-      <div class="next-step-bar"><div><strong>Next: Review &amp; Submit</strong><p>Check required sections and submit the fictional case to the administrator queue.</p></div><button class="button primary" type="button" data-open-test-step="review" data-application-id="${escapeHtml(application.id)}">Review application</button></div>
+      <div class="next-step-bar"><div><strong>Next: Additional Support &amp; Referrals</strong><p>Ask whether the fictional client needs help beyond Medicaid and record permission for MMS follow-up.</p></div><button class="button primary" type="button" data-open-test-step="support" data-application-id="${escapeHtml(application.id)}">Continue to support needs</button></div>
     </section>`;
 }
 
 async function renderApplicationReview(applicationId, notice = '') {
   elements.headerViewName.textContent = 'Review & Submit';
   const details = await loadTestApplicationDetails(applicationId);
-  const { application, applicant, householdMembers = [], incomeSources = [], resources = [], healthCoverage = [], livingArrangement, authorizedRepresentative, completion } = details;
+  const { application, applicant, householdMembers = [], incomeSources = [], resources = [], healthCoverage = [], livingArrangement, authorizedRepresentative, additionalSupport, completion } = details;
   const checks = [
     ['Applicant information', completion.applicant, 'applicant'], ['Residency', completion.residency, 'household'], ['Income or no-income selection', completion.income, 'income'],
     [`Resources${completion.resourcesRequired ? '' : ' (not required for this pathway)'}`, completion.resources, 'resources'], ['Living arrangement', completion.livingArrangement, 'resources'],
-    ['Health coverage or no-coverage selection', completion.healthCoverage, 'coverage'], ['Authorized representative choice', completion.authorizedRepresentative, 'coverage']
+    ['Health coverage or no-coverage selection', completion.healthCoverage, 'coverage'], ['Authorized representative choice', completion.authorizedRepresentative, 'coverage'],
+    ['Additional support and referral choice', completion.additionalSupport, 'support']
   ];
   const administrator = currentProfile?.account_type === 'administrator';
   const editableOwner = application.owner_id === currentUser?.id && application.status === 'draft';
+  let referralWorkspace = null;
+  if (application.status !== 'draft' && additionalSupport?.help_needed && additionalSupport?.referral_consent) {
+    try { referralWorkspace = await adminRequest('/api/referrals'); } catch { referralWorkspace = null; }
+  }
+  const linkedReferrals = (referralWorkspace?.referrals || []).filter(referral => referral.source_application_id === application.id);
+  const requestedServiceOptions = (additionalSupport?.requested_services || []).map(service => `<option value="${escapeHtml(service)}">${escapeHtml(referralServiceLabels[service] || service)}</option>`).join('');
+  const outboundReferralPanel = !additionalSupport
+    ? '<section class="admin-panel"><h2>Additional support</h2><p class="admin-empty">The additional-support question has not been answered.</p></section>'
+    : !additionalSupport.help_needed
+      ? '<section class="admin-panel"><h2>Additional support</h2><p class="admin-empty">The fictional client reported no additional resource needs.</p></section>'
+    : !additionalSupport?.referral_consent
+      ? '<section class="admin-panel"><h2>Additional support</h2><div class="policy-notice">Additional help was requested, but outside-referral permission was not provided. MMS may discuss options but must not share information with another organization.</div></section>'
+      : application.status === 'draft'
+        ? '<section class="admin-panel"><h2>Outbound referral readiness</h2><p class="admin-empty">Referral permission is recorded. Submit the fictional intake before sending an outside referral.</p></section>'
+        : referralWorkspace
+          ? `<section class="admin-panel referral-compose"><div class="referral-section-heading"><div><p class="eyebrow">MMS follow-through</p><h2>Create an outbound referral</h2><p>Turn the approved intake need into a tracked referral without re-entering the case.</p></div></div>
+              ${linkedReferrals.length ? `<h3>Referrals created from this intake</h3>${referralListTable(linkedReferrals)}` : '<p class="admin-empty">No outbound referral has been created from this intake yet.</p>'}
+              ${referralWorkspace.directory?.length ? `<form id="intakeReferralForm" class="admin-form" data-application-id="${escapeHtml(application.id)}"><div class="two-fields"><div class="field"><label for="intakeReferralRecipient">Refer to</label><select id="intakeReferralRecipient" name="recipientOrganizationId" required><option value="">Select an approved organization</option>${referralWorkspace.directory.map(organization => `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)}</option>`).join('')}</select></div><div class="field"><label for="intakeReferralService">Requested resource</label><select id="intakeReferralService" name="serviceRequested" required><option value="">Select a recorded need</option>${requestedServiceOptions}</select></div></div><div class="two-fields"><div class="field"><label for="intakeReferralClient">Fictional client / case label</label><input id="intakeReferralClient" name="clientLabel" maxlength="120" value="${escapeHtml(applicant ? `${applicant.legal_first_name} ${applicant.legal_last_name}` : 'Fictional intake client')}" required></div><div class="field"><label for="intakeReferralUrgency">Urgency</label><select id="intakeReferralUrgency" name="urgency">${optionList({ routine: 'Routine', priority: 'Priority follow-up', time_sensitive: 'Time-sensitive' }, additionalSupport.urgency || 'routine')}</select></div></div><div class="field"><label for="intakeReferralSummary">Referral summary</label><textarea id="intakeReferralSummary" name="summary" minlength="10" maxlength="1000" required>${escapeHtml(additionalSupport.notes || 'Fictional client requested additional community support during Medicaid intake.')}</textarea></div><label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm this outbound referral contains only fictional staging information.</span></label><button class="button primary" type="submit">Send tracked outbound referral</button></form>` : '<p class="admin-empty">Approve another agency or facility before creating an outbound referral.</p>'}
+            </section>`
+          : '<section class="admin-panel"><h2>Outbound referral</h2><div class="form-message error">The referral workspace could not be loaded.</div></section>';
   elements.dashboardContent.innerHTML = `
     <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Review &amp; Submit</h1><p>${escapeHtml(programTitle(application.program_id))} · Status: ${escapeHtml(application.status.replaceAll('_', ' '))}</p></section>
     ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
@@ -694,10 +715,12 @@ async function renderApplicationReview(applicationId, notice = '') {
       <article><span>Living setting</span><strong>${escapeHtml(livingArrangement ? livingSettingLabels[livingArrangement.setting] || livingArrangement.setting : 'Not entered')}</strong><small>FL-2: ${escapeHtml(livingArrangement ? fl2StatusLabels[livingArrangement.fl2_status] : 'Not entered')}</small></article>
       <article><span>Coverage</span><strong>${healthCoverage.length} selection(s)</strong><small>Appendix A information</small></article>
       <article><span>Representative</span><strong>${authorizedRepresentative ? (authorizedRepresentative.wants_representative ? 'Representative selected' : 'No representative') : 'Not entered'}</strong><small>Appendix C information</small></article>
+      <article><span>Additional support</span><strong>${additionalSupport ? (additionalSupport.help_needed ? `${additionalSupport.requested_services.length} need(s)` : 'No additional help') : 'Not answered'}</strong><small>${additionalSupport?.referral_consent ? 'Outside referral authorized' : 'No outside sharing authorized'}</small></article>
     </section>
-    <section class="intake-form-panel"><div class="intake-progress"><span>Step 6</span><strong>Required-section check</strong></div><div class="completion-list">${checks.map(([label, complete, step]) => `<button type="button" class="${complete ? 'complete' : 'incomplete'}" data-open-test-step="${step}" data-application-id="${escapeHtml(application.id)}"><span>${complete ? '✓' : '!'}</span><strong>${escapeHtml(label)}</strong><small>${complete ? 'Complete' : 'Needs information'}</small></button>`).join('')}</div>
-      ${editableOwner ? `<label class="test-confirmation"><input id="submitFictionalConfirmation" type="checkbox"><span>I confirm the entire application is fictional and authorize submission to the MMS staging review queue.</span></label><div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="coverage" data-application-id="${escapeHtml(application.id)}">Back to coverage</button><button class="button primary" type="button" data-submit-test-application="${escapeHtml(application.id)}" ${completion.ready ? '' : 'disabled'}>Submit fictional application</button></div>` : `<div class="policy-notice">This fictional application is read-only because its status is ${escapeHtml(application.status.replaceAll('_', ' '))}.</div>`}
+    <section class="intake-form-panel"><div class="intake-progress"><span>Step 7</span><strong>Required-section check</strong></div><div class="completion-list">${checks.map(([label, complete, step]) => `<button type="button" class="${complete ? 'complete' : 'incomplete'}" data-open-test-step="${step}" data-application-id="${escapeHtml(application.id)}"><span>${complete ? '✓' : '!'}</span><strong>${escapeHtml(label)}</strong><small>${complete ? 'Complete' : 'Needs information'}</small></button>`).join('')}</div>
+      ${editableOwner ? `<label class="test-confirmation"><input id="submitFictionalConfirmation" type="checkbox"><span>I confirm the entire application is fictional and authorize submission to the MMS staging review queue.</span></label><div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="support" data-application-id="${escapeHtml(application.id)}">Back to support needs</button><button class="button primary" type="button" data-submit-test-application="${escapeHtml(application.id)}" ${completion.ready ? '' : 'disabled'}>Submit fictional application</button></div>` : `<div class="policy-notice">This fictional application is read-only because its status is ${escapeHtml(application.status.replaceAll('_', ' '))}.</div>`}
     </section>
+    ${outboundReferralPanel}
     ${administrator && application.status !== 'draft' ? `<section class="admin-panel"><h2>Administrator review</h2><form id="reviewStatusForm" data-application-id="${escapeHtml(application.id)}"><div class="two-fields"><div class="field"><label for="reviewStatus">Review status</label><select id="reviewStatus" name="status">${optionList({ under_review: 'Under review', information_requested: 'Information requested', approved: 'Approved test', denied: 'Denied test', closed: 'Closed' }, application.status === 'submitted' ? 'under_review' : application.status)}</select></div><div class="field"><label>Safety boundary</label><p class="field-help">Status changes apply only to this fictional staging record.</p></div></div><button class="button primary" type="submit">Update review status</button></form></section>` : ''}`;
 }
 
@@ -779,6 +802,16 @@ async function saveAuthorizedRepresentative(form) {
   await renderCoverageRepresentative(applicationId, 'Fictional authorized representative choice saved.');
 }
 
+async function saveAdditionalSupport(form) {
+  const values = new FormData(form); const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_referral_needs', applicationId, helpNeeded: values.get('helpNeeded') === 'true', requestedServices: values.getAll('requestedService'),
+    urgency: values.get('urgency'), preferredContactMethod: values.get('preferredContactMethod'), notes: values.get('notes'),
+    referralConsent: values.get('referralConsent') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderAdditionalSupport(applicationId, 'Fictional additional-support and referral preferences saved.');
+}
+
 const referralServiceLabels = {
   medicaid_navigation: 'Medicaid navigation',
   living_legacy: 'Living Legacy planning',
@@ -788,8 +821,41 @@ const referralServiceLabels = {
   hospice_palliative: 'Hospice or palliative support',
   benefits_documents: 'Benefits or document help',
   community_resource: 'Community resource',
+  housing: 'Housing support',
+  food_nutrition: 'Food or nutrition assistance',
+  transportation: 'Transportation',
+  utilities: 'Utility assistance',
+  legal_aid: 'Legal aid',
+  behavioral_health: 'Behavioral health support',
+  caregiver_respite: 'Caregiver or respite support',
   other: 'Other service'
 };
+
+async function renderAdditionalSupport(applicationId, notice = '') {
+  elements.headerViewName.textContent = 'Additional Support & Referrals';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, additionalSupport } = details;
+  const helpNeeded = additionalSupport?.help_needed === true;
+  const selectedServices = new Set(additionalSupport?.requested_services || []);
+  const availableServices = Object.entries(referralServiceLabels).filter(([value]) => value !== 'medicaid_navigation');
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Additional Support &amp; Community Referrals</h1><p>Ask about needs beyond Medicaid so MMS can coordinate approved outside help.</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Use a fictional scenario only.</strong><p>Do not include real housing, medical, legal, financial, family, or crisis information in staging.</p></div></div>
+    <section class="intake-form-panel"><div class="intake-progress"><span>Step 6</span><strong>Additional resource needs</strong></div>
+      <form id="additionalSupportForm" data-application-id="${escapeHtml(application.id)}">
+        <fieldset><legend>Does this client need help with anything besides Medicaid?</legend><div class="field"><label for="additionalHelpNeeded">Additional help needed?</label><select id="additionalHelpNeeded" name="helpNeeded"><option value="false" ${helpNeeded ? '' : 'selected'}>No additional help requested</option><option value="true" ${helpNeeded ? 'selected' : ''}>Yes — identify requested resources</option></select></div></fieldset>
+        <div data-additional-support-fields ${helpNeeded ? '' : 'hidden'}>
+          <fieldset><legend>What kind of help is requested?</legend><div class="support-choice-grid">${availableServices.map(([value, label]) => `<label class="support-choice"><input type="checkbox" name="requestedService" value="${escapeHtml(value)}" ${selectedServices.has(value) ? 'checked' : ''}><span>${escapeHtml(label)}</span></label>`).join('')}</div></fieldset>
+          <fieldset><legend>Follow-up preferences</legend><div class="two-fields"><div class="field"><label for="supportUrgency">Urgency</label><select id="supportUrgency" name="urgency">${optionList({ routine: 'Routine', priority: 'Priority follow-up', time_sensitive: 'Time-sensitive' }, additionalSupport?.urgency || 'routine')}</select></div><div class="field"><label for="supportContactMethod">Preferred follow-up</label><select id="supportContactMethod" name="preferredContactMethod">${optionList({ portal: 'MMS Connect portal', phone: 'Phone call', text: 'Text message', email: 'Email' }, additionalSupport?.preferred_contact_method || 'portal')}</select></div></div><div class="field"><label for="supportNotes">Fictional support notes</label><textarea id="supportNotes" name="notes" maxlength="1000" placeholder="Describe the fictional need and desired outcome without sensitive detail.">${escapeHtml(additionalSupport?.notes || '')}</textarea></div></fieldset>
+          <label class="test-confirmation"><input type="checkbox" name="referralConsent" ${additionalSupport?.referral_consent ? 'checked' : ''}><span>The fictional client authorizes MMS to share the minimum necessary information with a selected referral organization. Without this permission, MMS may discuss options but will not send an outside referral.</span></label>
+        </div>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="coverage" data-application-id="${escapeHtml(application.id)}">Back to coverage</button><button class="button primary" type="submit">Save support needs</button></div>
+      </form>
+      <div class="next-step-bar"><div><strong>Next: Review &amp; Submit</strong><p>Confirm every required section, including the additional-support question.</p></div><button class="button primary" type="button" data-open-test-step="review" data-application-id="${escapeHtml(application.id)}">Review application</button></div>
+    </section>`;
+}
 
 const referralStatusLabels = {
   sent: 'Sent', acknowledged: 'Acknowledged', accepted: 'Accepted', declined: 'Declined',
@@ -1001,6 +1067,7 @@ function wireInterface() {
       if (step === 'income') return void renderIncomeEmployment(applicationId).catch(error => window.alert(error.message));
       if (step === 'resources') return void renderResourcesLiving(applicationId).catch(error => window.alert(error.message));
       if (step === 'coverage') return void renderCoverageRepresentative(applicationId).catch(error => window.alert(error.message));
+      if (step === 'support') return void renderAdditionalSupport(applicationId).catch(error => window.alert(error.message));
       if (step === 'review') return void renderApplicationReview(applicationId).catch(error => window.alert(error.message));
     }
     const editMemberButton = event.target.closest('[data-edit-household-member]');
@@ -1088,6 +1155,26 @@ function wireInterface() {
         .then(() => renderReferralDetail(form.dataset.referralId, 'Referral update added to the shared timeline.'))
         .catch(error => { setBusy(form, false); window.alert(error.message); });
     }
+    if (event.target.id === 'intakeReferralForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      const values = new FormData(form);
+      setBusy(form, true);
+      return void adminRequest('/api/referrals', { method: 'POST', body: {
+        action: 'create', sourceApplicationId: form.dataset.applicationId, recipientOrganizationId: values.get('recipientOrganizationId'),
+        serviceRequested: values.get('serviceRequested'), clientLabel: values.get('clientLabel'), urgency: values.get('urgency'), summary: values.get('summary'),
+        consentConfirmed: true, fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+      } }).then(() => renderApplicationReview(form.dataset.applicationId, 'Tracked outbound referral created from this intake.'))
+        .catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'additionalSupportForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      setBusy(form, true);
+      return void saveAdditionalSupport(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
     if (event.target.id === 'applicantInfoForm') {
       event.preventDefault();
       const form = event.target;
@@ -1152,6 +1239,10 @@ function wireInterface() {
     if (event.target.id === 'mailingSame') {
       const fields = elements.dashboardContent.querySelector('[data-mailing-fields]');
       if (fields) fields.hidden = event.target.checked;
+    }
+    if (event.target.id === 'additionalHelpNeeded') {
+      const fields = elements.dashboardContent.querySelector('[data-additional-support-fields]');
+      if (fields) fields.hidden = event.target.value !== 'true';
     }
   });
   document.getElementById('menuButton').addEventListener('click', () => elements.dashboard.classList.toggle('nav-open'));

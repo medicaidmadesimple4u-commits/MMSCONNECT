@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { requestBody, requireAllowedOrigin, requireMethod, requireReferralUser, safeError, sendJson, serviceRequest } from '../lib/admin.js';
 
 const privilegedRoles = new Set(['staff', 'administrator']);
-const services = new Set(['medicaid_navigation', 'living_legacy', 'long_term_care', 'home_care', 'adult_day', 'hospice_palliative', 'benefits_documents', 'community_resource', 'other']);
+const services = new Set(['medicaid_navigation', 'living_legacy', 'long_term_care', 'home_care', 'adult_day', 'hospice_palliative', 'benefits_documents', 'community_resource', 'housing', 'food_nutrition', 'transportation', 'utilities', 'legal_aid', 'behavioral_health', 'caregiver_respite', 'other']);
 const urgencies = new Set(['routine', 'priority', 'time_sensitive']);
 const transitions = {
   sent: ['acknowledged', 'accepted', 'declined', 'cancelled'],
@@ -39,7 +39,7 @@ function allowedStatusActions(context, referral) {
 }
 
 async function listAccessibleReferrals(context) {
-  const select = 'id,reference_number,sender_organization_id,recipient_organization_id,created_by,client_label,service_requested,urgency,summary,status,environment,test_mode,acknowledged_at,accepted_at,completed_at,closed_at,created_at,updated_at';
+  const select = 'id,reference_number,sender_organization_id,recipient_organization_id,created_by,source_application_id,client_label,service_requested,urgency,summary,status,environment,test_mode,acknowledged_at,accepted_at,completed_at,closed_at,created_at,updated_at';
   if (isPrivileged(context)) return serviceRequest(`/rest/v1/referrals?select=${select}&order=updated_at.desc&limit=500`);
   const organizationId = encodeURIComponent(context.profile.organization_id);
   const [sent, received] = await Promise.all([
@@ -78,6 +78,7 @@ async function eventHistory(referralId) {
 function decorateReferral(context, referral, organizations) {
   return {
     ...referral,
+    source_application_id: isPrivileged(context) ? referral.source_application_id || null : null,
     sender_organization: organizations.get(referral.sender_organization_id)?.name || 'Unknown organization',
     recipient_organization: organizations.get(referral.recipient_organization_id)?.name || 'Unknown organization',
     is_sender: referral.sender_organization_id === context.profile.organization_id,
@@ -131,6 +132,7 @@ export default async function handler(request, response) {
       const clientLabel = text(body.clientLabel, 120);
       const summary = text(body.summary, 1000);
       const staging = targetEnvironment() !== 'production';
+      const requestedSourceApplicationId = String(body.sourceApplicationId || '');
       const senderOrganization = organizationMap.get(context.profile.organization_id);
       const recipientOrganization = organizationMap.get(recipientOrganizationId);
       if (!senderOrganization || senderOrganization.status !== 'active') return sendJson(response, 403, { error: 'Your organization is not active in the referral directory.' });
@@ -139,10 +141,24 @@ export default async function handler(request, response) {
       if (body.consentConfirmed !== true) return sendJson(response, 400, { error: 'Confirm the client authorized this referral.' });
       if (staging && body.fictionalConfirmation !== true) return sendJson(response, 400, { error: 'Confirm that every referral detail is fictional test information.' });
 
+      let sourceApplicationId = null;
+      if (requestedSourceApplicationId) {
+        if (!isPrivileged(context) || !validUuid(requestedSourceApplicationId)) return sendJson(response, 403, { error: 'Only MMS staff can create a referral from an intake record.' });
+        const [applications, referralNeeds] = await Promise.all([
+          serviceRequest(`/rest/v1/applications?select=id,owner_id,status&id=eq.${encodeURIComponent(requestedSourceApplicationId)}&environment=eq.staging&test_mode=eq.true&limit=1`),
+          serviceRequest(`/rest/v1/application_referral_needs?select=application_id,help_needed,requested_services,referral_consent&application_id=eq.${encodeURIComponent(requestedSourceApplicationId)}&limit=1`)
+        ]);
+        const sourceApplication = applications?.[0];
+        const need = referralNeeds?.[0];
+        if (!sourceApplication || sourceApplication.status === 'draft' || (context.profile.account_type === 'staff' && sourceApplication.owner_id !== context.user.id)) return sendJson(response, 403, { error: 'You do not have access to create a referral from this submitted intake.' });
+        if (!need?.help_needed || !need.referral_consent || !need.requested_services?.includes(serviceRequested)) return sendJson(response, 400, { error: 'This intake does not contain consent for the selected outbound referral need.' });
+        sourceApplicationId = requestedSourceApplicationId;
+      }
+
       const date = new Date().toISOString().slice(2, 10).replaceAll('-', '');
       const referenceNumber = `MMS-R-${date}-${randomBytes(3).toString('hex').toUpperCase()}`;
       const created = await serviceRequest('/rest/v1/referrals', { method: 'POST', prefer: 'return=representation', body: {
-        reference_number: referenceNumber, sender_organization_id: senderOrganization.id, recipient_organization_id: recipientOrganization.id,
+        reference_number: referenceNumber, sender_organization_id: senderOrganization.id, recipient_organization_id: recipientOrganization.id, source_application_id: sourceApplicationId,
         created_by: context.user.id, client_label: clientLabel, service_requested: serviceRequested, urgency, summary, status: 'sent',
         consent_confirmed_at: new Date().toISOString(), environment: staging ? 'staging' : 'production', test_mode: staging
       } });

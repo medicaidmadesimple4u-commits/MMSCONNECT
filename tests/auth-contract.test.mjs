@@ -193,6 +193,29 @@ test('referral network is closed-loop, role protected, and staging safe', async 
   assert.doesNotMatch(script, /\.from\(['"]referrals['"]\)/);
 });
 
+test('intake captures additional needs and can create consented outbound referrals', async () => {
+  const [script, intake, referrals, policy, sql] = await Promise.all([
+    read('auth.js'), read('api/intake/test-applications.js'), read('api/referrals.js'), read('intake-policy.js'),
+    read('supabase/migrations/20260717013000_add_intake_referral_needs.sql')
+  ]);
+  assert.match(policy, /Additional support and community referrals/);
+  assert.match(script, /id="additionalSupportForm"/);
+  assert.match(script, /Does this client need help with anything besides Medicaid/);
+  assert.match(script, /id="intakeReferralForm"/);
+  assert.match(script, /sourceApplicationId/);
+  assert.match(intake, /action === 'save_referral_needs'/);
+  assert.match(intake, /referralNeedRows/);
+  assert.match(intake, /additionalSupport: Boolean/);
+  assert.match(referrals, /Only MMS staff can create a referral from an intake record/);
+  assert.match(referrals, /need\.referral_consent/);
+  assert.match(referrals, /source_application_id/);
+  assert.match(sql, /create table if not exists public\.application_referral_needs/i);
+  assert.match(sql, /referral_consent boolean not null default false/i);
+  assert.match(sql, /requested_services text\[\]/i);
+  assert.match(sql, /alter table public\.application_referral_needs enable row level security/i);
+  assert.match(sql, /revoke all on table public\.application_referral_needs from anon, authenticated/i);
+});
+
 test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {
   const [library, accounts, invite, update, intake] = await Promise.all([
     read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')

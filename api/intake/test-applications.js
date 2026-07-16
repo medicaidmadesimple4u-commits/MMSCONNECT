@@ -13,6 +13,9 @@ const coverageTypes = new Set(['none', 'employer', 'medicare_a', 'medicare_b', '
 const representativeTypes = new Set(['none', 'person', 'organization']);
 const authorityScopes = new Set(['application_only', 'notices_and_application', 'full_case']);
 const reviewStatuses = new Set(['under_review', 'information_requested', 'approved', 'denied', 'closed']);
+const referralNeedServices = new Set(['living_legacy', 'long_term_care', 'home_care', 'adult_day', 'hospice_palliative', 'benefits_documents', 'community_resource', 'housing', 'food_nutrition', 'transportation', 'utilities', 'legal_aid', 'behavioral_health', 'caregiver_respite', 'other']);
+const referralUrgencies = new Set(['routine', 'priority', 'time_sensitive']);
+const contactMethods = new Set(['portal', 'phone', 'text', 'email']);
 
 function text(value, maximum) { return String(value || '').trim().slice(0, maximum); }
 function optionalText(value, maximum) { return text(value, maximum) || null; }
@@ -38,7 +41,7 @@ async function accessibleApplication(staff, applicationId) {
 
 async function applicationDetails(application) {
   const id = encodeURIComponent(application.id);
-  const [applicants, residencyRows, householdMembers, incomeSources, resources, livingRows, healthCoverage, representativeRows] = await Promise.all([
+  const [applicants, residencyRows, householdMembers, incomeSources, resources, livingRows, healthCoverage, representativeRows, referralNeedRows] = await Promise.all([
     serviceRequest(`/rest/v1/application_applicants?select=legal_first_name,legal_middle_name,legal_last_name,preferred_name,date_of_birth,contact_email,phone,preferred_language,nc_county,applying_for_coverage&application_id=eq.${id}&person_order=eq.1&limit=1`),
     serviceRequest(`/rest/v1/application_residency?select=*&application_id=eq.${id}&limit=1`),
     serviceRequest(`/rest/v1/application_household_members?select=id,first_name,last_name,date_of_birth,relationship_to_applicant,lives_with_applicant,applying_for_coverage,tax_relationship,pregnant,created_at&application_id=eq.${id}&order=created_at.asc`),
@@ -46,21 +49,23 @@ async function applicationDetails(application) {
     serviceRequest(`/rest/v1/application_resources?select=id,resource_type,owner_label,description,current_value,jointly_owned,created_at&application_id=eq.${id}&order=created_at.asc`),
     serviceRequest(`/rest/v1/application_living_arrangements?select=*&application_id=eq.${id}&limit=1`),
     serviceRequest(`/rest/v1/application_health_coverage?select=id,coverage_type,covered_person,insurer_name,policyholder_name,employment_coverage_available,coverage_start_date,coverage_end_date,created_at&application_id=eq.${id}&order=created_at.asc`),
-    serviceRequest(`/rest/v1/application_authorized_representatives?select=*&application_id=eq.${id}&limit=1`)
+    serviceRequest(`/rest/v1/application_authorized_representatives?select=*&application_id=eq.${id}&limit=1`),
+    serviceRequest(`/rest/v1/application_referral_needs?select=*&application_id=eq.${id}&limit=1`)
   ]);
   const details = {
     application,
     applicant: applicants?.[0] || null,
     residency: residencyRows?.[0] || null,
     householdMembers: householdMembers || [], incomeSources: incomeSources || [], resources: resources || [],
-    livingArrangement: livingRows?.[0] || null, healthCoverage: healthCoverage || [], authorizedRepresentative: representativeRows?.[0] || null
+    livingArrangement: livingRows?.[0] || null, healthCoverage: healthCoverage || [], authorizedRepresentative: representativeRows?.[0] || null,
+    additionalSupport: referralNeedRows?.[0] || null
   };
   const resourceRequired = getProgramSections(application.program_id).some(section => section.id === 'resources');
   details.completion = {
     applicant: Boolean(details.applicant), residency: Boolean(details.residency), income: details.incomeSources.length > 0,
     resources: !resourceRequired || details.resources.length > 0, resourcesRequired: resourceRequired,
     livingArrangement: Boolean(details.livingArrangement), healthCoverage: details.healthCoverage.length > 0,
-    authorizedRepresentative: Boolean(details.authorizedRepresentative)
+    authorizedRepresentative: Boolean(details.authorizedRepresentative), additionalSupport: Boolean(details.additionalSupport)
   };
   details.completion.ready = Object.entries(details.completion).filter(([key]) => key !== 'resourcesRequired').every(([, value]) => value === true);
   return details;
@@ -107,13 +112,14 @@ export default async function handler(request, response) {
     if (action === 'reset' || action === 'delete_application') {
       const application = await accessibleApplication(staff, applicationId);
       if (!application || !confirmedFictional(body)) return sendJson(response, 400, { error: 'Select an accessible fictional test application and confirm the action.' });
+      await serviceRequest(`/rest/v1/referrals?source_application_id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
       if (action === 'delete_application') {
         await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
         return sendJson(response, 200, { deleted: true });
       }
       for (const table of [
         'application_authorized_representatives', 'application_health_coverage', 'application_resources', 'application_living_arrangements',
-        'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
+        'application_referral_needs', 'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
       ]) {
         await serviceRequest(`/rest/v1/${table}?application_id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
       }
@@ -292,6 +298,22 @@ export default async function handler(request, response) {
         phone: wantsRepresentative ? optionalText(body.phone, 30) : null, email, authority_scope: authorityScope, designation_acknowledged: wantsRepresentative ? body.designationAcknowledged === true : false
       } });
       return sendJson(response, 200, { authorizedRepresentative: saved?.[0] });
+    }
+
+    if (action === 'save_referral_needs') {
+      const helpNeeded = body.helpNeeded === true;
+      const requestedServices = [...new Set(Array.isArray(body.requestedServices) ? body.requestedServices.map(String) : [])];
+      const urgency = String(body.urgency || 'routine');
+      const preferredContactMethod = String(body.preferredContactMethod || 'portal');
+      if (!requestedServices.every(service => referralNeedServices.has(service)) || !referralUrgencies.has(urgency) || !contactMethods.has(preferredContactMethod)) return sendJson(response, 400, { error: 'Select valid additional-support options.' });
+      if (helpNeeded && requestedServices.length === 0) return sendJson(response, 400, { error: 'Select at least one type of additional help.' });
+      const saved = await serviceRequest('/rest/v1/application_referral_needs?on_conflict=application_id', { method: 'POST', prefer: 'resolution=merge-duplicates,return=representation', body: {
+        application_id: application.id, help_needed: helpNeeded, requested_services: helpNeeded ? requestedServices : [], urgency: helpNeeded ? urgency : 'routine',
+        preferred_contact_method: preferredContactMethod, notes: helpNeeded ? optionalText(body.notes, 1000) : null,
+        referral_consent: helpNeeded && body.referralConsent === true, created_by: staff.user.id
+      } });
+      await auditStatus(application.id, staff.user.id, 'referral_needs_saved');
+      return sendJson(response, 200, { additionalSupport: saved?.[0] });
     }
 
     return sendJson(response, 400, { error: 'Unsupported intake action.' });

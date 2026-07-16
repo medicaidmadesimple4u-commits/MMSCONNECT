@@ -149,6 +149,11 @@ export const intakeSections = {
     summary: 'Whether the applicant wants a person or organization authorized to act on the application and the scope of that authority.',
     policy: ['DHB-5202C-ia']
   },
+  additionalSupport: {
+    title: 'Additional support and community referrals',
+    summary: 'Whether the applicant needs help beyond Medicaid, which services are requested, urgency, preferred follow-up, and permission for MMS to coordinate an outside referral.',
+    policy: ['MMS service coordination — not an eligibility factor']
+  },
   retroactive: {
     title: 'Past medical bills',
     summary: 'Whether coverage is requested for eligible months before the application month and the related household and financial information.',
@@ -161,8 +166,8 @@ export const intakeSections = {
   }
 };
 
-const commonMagi = ['applicant', 'residency', 'citizenship', 'household', 'income', 'healthCoverage', 'authorizedRepresentative', 'retroactive', 'documents'];
-const commonAdult = ['applicant', 'residency', 'citizenship', 'income', 'resources', 'healthCoverage', 'livingArrangement', 'authorizedRepresentative', 'retroactive', 'documents'];
+const commonMagi = ['applicant', 'residency', 'citizenship', 'household', 'income', 'healthCoverage', 'authorizedRepresentative', 'additionalSupport', 'retroactive', 'documents'];
+const commonAdult = ['applicant', 'residency', 'citizenship', 'income', 'resources', 'healthCoverage', 'livingArrangement', 'authorizedRepresentative', 'additionalSupport', 'retroactive', 'documents'];
 const institutional = [...commonAdult, 'transfers', 'longTermCare'];
 
 export const medicaidPrograms = [

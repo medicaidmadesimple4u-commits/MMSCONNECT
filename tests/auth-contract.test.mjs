@@ -216,6 +216,23 @@ test('intake captures additional needs and can create consented outbound referra
   assert.match(sql, /revoke all on table public\.application_referral_needs from anon, authenticated/i);
 });
 
+test('staging includes fictional companies and a full referral simulator without shared accounts', async () => {
+  const [script, api, sql] = await Promise.all([
+    read('auth.js'), read('api/referrals.js'), read('supabase/migrations/20260717023000_seed_demo_referral_companies.sql')
+  ]);
+  for (const company of ['Helpful Llama Community Services', 'Golden Acorn Home Care', 'Pineapple Place Adult Day Center', 'Gentle Dragonfly Hospice', 'Paperwork Wizards Legal & Legacy Center', 'Bluebird Senior Living']) assert.match(sql, new RegExp(company.replace(/[&]/g, '\\&')));
+  assert.match(sql, /test_mode boolean not null default false/i);
+  assert.match(sql, /acting_organization_id/i);
+  assert.doesNotMatch(sql, /auth\.users|password/i);
+  assert.match(api, /action === 'create_demo_inbound'/);
+  assert.match(api, /action === 'simulate_recipient_status'/);
+  assert.match(api, /demo_recipient_status_changed/);
+  assert.match(api, /environment=eq\.\$\{referralEnvironment\(\)\}/);
+  assert.match(script, /id="demoInboundReferralForm"/);
+  assert.match(script, /data-simulate-referral-status/);
+  assert.match(script, /End-to-end test lab/);
+});
+
 test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {
   const [library, accounts, invite, update, intake] = await Promise.all([
     read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')

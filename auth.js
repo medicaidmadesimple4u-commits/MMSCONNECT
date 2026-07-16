@@ -873,13 +873,24 @@ function formatReferralDateTime(value) {
   if (!value) return 'Not recorded';
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
+function referralEventLabel(event) {
+  if (event.event_type === 'demo_referral_sent') return 'Fictional agency referral sent';
+  if (event.event_type === 'referral_sent') return 'Referral sent';
+  if (event.event_type === 'note_added') return 'Update added';
+  if (event.event_type === 'demo_recipient_status_changed') return `Simulated agency response: ${referralStatusLabel(event.previous_status)} → ${referralStatusLabel(event.new_status)}`;
+  return `${referralStatusLabel(event.previous_status)} → ${referralStatusLabel(event.new_status)}`;
+}
+function referralEventActor(event) {
+  if (event.simulated && event.actor_organization) return `${event.actor_name} · simulating ${event.actor_organization}`;
+  return `${event.actor_name}${event.actor_organization ? ` · ${event.actor_organization}` : ''}`;
+}
 
 function referralListTable(referrals) {
   if (!referrals.length) return '<p class="admin-empty">No referrals are available yet.</p>';
   return `<div class="admin-table-wrap"><table class="admin-table referral-table"><thead><tr><th>Reference</th><th>Client / case</th><th>Route</th><th>Service</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${referrals.map(referral => `<tr>
     <td><strong>${escapeHtml(referral.reference_number)}</strong><small>${referral.is_recipient ? 'Received' : referral.is_sender ? 'Sent' : 'MMS oversight'}</small></td>
     <td>${escapeHtml(referral.client_label)}</td>
-    <td><small>${escapeHtml(referral.sender_organization)}</small><span class="referral-route-arrow" aria-hidden="true">→</span><small>${escapeHtml(referral.recipient_organization)}</small></td>
+    <td><small>${escapeHtml(referral.sender_organization)}${referral.sender_is_test ? ' <span class="demo-badge">Demo</span>' : ''}</small><span class="referral-route-arrow" aria-hidden="true">→</span><small>${escapeHtml(referral.recipient_organization)}${referral.recipient_is_test ? ' <span class="demo-badge">Demo</span>' : ''}</small></td>
     <td>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</td>
     <td><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></td>
     <td>${escapeHtml(formatAccountDate(referral.updated_at))}</td>
@@ -903,6 +914,7 @@ async function renderReferralNetwork(notice = '') {
     const active = referrals.filter(referral => ['accepted', 'in_progress'].includes(referral.status)).length;
     const completed = referrals.filter(referral => ['completed', 'closed'].includes(referral.status)).length;
     const canCreate = data.directory?.length > 0;
+    const demoOrganizations = data.demoOrganizations || [];
     elements.dashboardContent.innerHTML = `
       <section class="content-heading referral-heading"><div><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Send a referral to Medicaid Made Simple or another approved organization and follow it through completion.</p></div><span class="status-pill">${escapeHtml(data.organization?.name || roleLabel(currentProfile?.account_type))}</span></section>
       ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
@@ -912,7 +924,7 @@ async function renderReferralNetwork(notice = '') {
       </section>
       <section class="admin-panel referral-compose"><div class="referral-section-heading"><div><p class="eyebrow">New connection</p><h2>Create a referral</h2><p>The recipient will see the referral in its own inbox and can acknowledge, accept, decline, and complete it.</p></div></div>
         ${canCreate ? `<form id="referralCreateForm" class="admin-form">
-          <div class="two-fields"><div class="field"><label for="referralRecipient">Refer to</label><select id="referralRecipient" name="recipientOrganizationId" required><option value="">Select an approved organization</option>${data.directory.map(organization => `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)} — ${escapeHtml(organization.organization_type === 'mms' ? 'MMS' : roleLabel(organization.organization_type))}</option>`).join('')}</select></div>
+          <div class="two-fields"><div class="field"><label for="referralRecipient">Refer to</label><select id="referralRecipient" name="recipientOrganizationId" required><option value="">Select an approved organization</option>${data.directory.map(organization => `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)} — ${escapeHtml(organization.test_mode ? 'Fictional demo' : organization.organization_type === 'mms' ? 'MMS' : roleLabel(organization.organization_type))}</option>`).join('')}</select></div>
           <div class="field"><label for="referralService">Service requested</label><select id="referralService" name="serviceRequested" required><option value="">Select a service</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}</select></div></div>
           <div class="two-fields"><div class="field"><label for="referralClientLabel">Fictional client or case label</label><input id="referralClientLabel" name="clientLabel" maxlength="120" placeholder="Example: Captain Tater Tot" required><small class="field-help">Use an invented label for staging. Do not use a real client name.</small></div>
           <div class="field"><label for="referralUrgency">Urgency</label><select id="referralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div>
@@ -922,6 +934,10 @@ async function renderReferralNetwork(notice = '') {
           <button class="button primary" type="submit">Send fictional referral</button>
         </form>` : '<p class="admin-empty">No other approved organizations are available in the referral directory yet.</p>'}
       </section>
+      ${demoOrganizations.length ? `<section class="admin-panel demo-referral-lab"><div class="referral-section-heading"><div><p class="eyebrow">End-to-end test lab</p><h2>Generate a fictional agency referral to MMS</h2><p>Choose a demo company, send an inbound referral, then process it through the MMS and recipient steps.</p></div><span class="demo-badge">Staging only</span></div>
+        <div class="demo-company-grid">${demoOrganizations.map(organization => `<article><div><strong>${escapeHtml(organization.name)}</strong><span>${escapeHtml(organization.organization_type === 'facility' ? 'Fictional facility' : 'Fictional agency')}</span></div><p>${escapeHtml(organization.description || '')}</p><div>${(organization.service_categories || []).map(service => `<span class="service-chip">${escapeHtml(referralServiceLabels[service] || service)}</span>`).join('')}</div></article>`).join('')}</div>
+        <form id="demoInboundReferralForm" class="admin-form"><div class="two-fields"><div class="field"><label for="demoSenderOrganization">Fictional sending company</label><select id="demoSenderOrganization" name="senderOrganizationId" required><option value="">Select a fictional company</option>${demoOrganizations.map(organization => `<option value="${escapeHtml(organization.id)}" data-demo-services="${escapeHtml((organization.service_categories || []).join(','))}">${escapeHtml(organization.name)}</option>`).join('')}</select></div><div class="field"><label for="demoReferralService">Service requested from MMS</label><select id="demoReferralService" name="serviceRequested" required><option value="">Select the company first</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}" disabled>${escapeHtml(label)}</option>`).join('')}</select></div></div><div class="two-fields"><div class="field"><label for="demoClientLabel">Fictional client / case label</label><input id="demoClientLabel" name="clientLabel" maxlength="120" value="Professor Pickles" required></div><div class="field"><label for="demoReferralUrgency">Urgency</label><select id="demoReferralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div><div class="field"><label for="demoReferralSummary">Fictional referral summary</label><textarea id="demoReferralSummary" name="summary" minlength="10" maxlength="1000" required>Professor Pickles needs fictional help coordinating services with Medicaid Made Simple.</textarea></div><label class="test-confirmation"><input name="consentConfirmed" type="checkbox" required><span>I confirm the fictional client authorized this simulated referral.</span></label><label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm every detail is fictional and intended only for staging.</span></label><button class="button primary" type="submit">Generate inbound demo referral</button></form>
+      </section>` : ''}
       <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Shared tracking</p><h2>All referrals</h2><p>Open any referral to see its current owner, allowed next actions, and complete history.</p></div></div>${referralListTable(referrals)}</section>`;
   } catch (error) {
     elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1></section><div class="form-message error">${escapeHtml(error.message)}</div>`;
@@ -935,14 +951,15 @@ async function renderReferralDetail(referralId, notice = '') {
     const { referral, events = [] } = await adminRequest(`/api/referrals?referralId=${encodeURIComponent(referralId)}`);
     elements.dashboardContent.innerHTML = `
       <button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button>
-      <section class="content-heading referral-heading"><div><p class="eyebrow">${escapeHtml(referral.reference_number)}</p><h1>${escapeHtml(referral.client_label)}</h1><p>${escapeHtml(referral.sender_organization)} <span aria-hidden="true">→</span> ${escapeHtml(referral.recipient_organization)}</p></div><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></section>
+      <section class="content-heading referral-heading"><div><p class="eyebrow">${escapeHtml(referral.reference_number)}</p><h1>${escapeHtml(referral.client_label)}</h1><p>${escapeHtml(referral.sender_organization)}${referral.sender_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''} <span aria-hidden="true">→</span> ${escapeHtml(referral.recipient_organization)}${referral.recipient_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''}</p></div><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></section>
       ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
       <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging record.</strong><p>Do not add real client, medical, financial, or identifying information to this referral or its updates.</p></div></div>
       <div class="referral-detail-grid"><section class="admin-panel"><h2>Referral summary</h2><dl class="referral-facts"><dt>Service</dt><dd>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</dd><dt>Urgency</dt><dd>${escapeHtml(referral.urgency.replaceAll('_', ' '))}</dd><dt>Sent</dt><dd>${escapeHtml(formatReferralDateTime(referral.created_at))}</dd><dt>From</dt><dd>${escapeHtml(referral.sender_organization)}</dd><dt>To</dt><dd>${escapeHtml(referral.recipient_organization)}</dd></dl><div class="referral-summary-copy"><strong>Requested help</strong><p>${escapeHtml(referral.summary)}</p></div>
         ${referral.allowed_status_actions?.length ? `<div class="referral-actions"><h3>Available next actions</h3>${referral.allowed_status_actions.map(status => `<button class="button ${['accepted', 'acknowledged', 'in_progress', 'completed'].includes(status) ? 'primary' : 'secondary'}" type="button" data-referral-status="${escapeHtml(status)}" data-referral-id="${escapeHtml(referral.id)}">${escapeHtml(referralStatusLabel(status))}</button>`).join('')}</div>` : '<p class="admin-empty">No status action is required from your role right now.</p>'}
+        ${referral.recipient_simulation_actions?.length ? `<div class="demo-simulator"><span class="demo-badge">Staging simulator</span><h3>Respond as ${escapeHtml(referral.recipient_organization)}</h3><p>Use these buttons to test the fictional recipient’s side without a shared password.</p><div>${referral.recipient_simulation_actions.map(status => `<button class="button secondary" type="button" data-simulate-referral-status="${escapeHtml(status)}" data-referral-id="${escapeHtml(referral.id)}">Simulate ${escapeHtml(referralStatusLabel(status))}</button>`).join('')}</div></div>` : ''}
       </section>
       <section class="admin-panel"><h2>Add an update</h2><form id="referralNoteForm" data-referral-id="${escapeHtml(referral.id)}"><div class="field"><label for="referralNote">Fictional update</label><textarea id="referralNote" name="note" minlength="2" maxlength="1000" placeholder="Add a next step or coordination update." required></textarea></div><button class="button secondary" type="submit">Add update</button></form></section></div>
-      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Closed-loop history</p><h2>Referral timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(event.event_type === 'referral_sent' ? 'Referral sent' : event.event_type === 'note_added' ? 'Update added' : `${referralStatusLabel(event.previous_status)} → ${referralStatusLabel(event.new_status)}`)}</strong><small>${escapeHtml(event.actor_name)}${event.actor_organization ? ` · ${escapeHtml(event.actor_organization)}` : ''} · ${escapeHtml(formatReferralDateTime(event.created_at))}</small>${event.note ? `<p>${escapeHtml(event.note)}</p>` : ''}</div></li>`).join('') : '<li><div><strong>No history is available.</strong></div></li>'}</ol></section>`;
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Closed-loop history</p><h2>Referral timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(referralEventLabel(event))}</strong><small>${escapeHtml(referralEventActor(event))} · ${escapeHtml(formatReferralDateTime(event.created_at))}</small>${event.note ? `<p>${escapeHtml(event.note)}</p>` : ''}</div></li>`).join('') : '<li><div><strong>No history is available.</strong></div></li>'}</ol></section>`;
   } catch (error) {
     elements.dashboardContent.innerHTML = `<button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button><div class="form-message error">${escapeHtml(error.message)}</div>`;
   }
@@ -1029,6 +1046,15 @@ function wireInterface() {
       return void adminRequest('/api/referrals', { method: 'POST', body: { action: 'update_status', referralId: referralStatusButton.dataset.referralId, status: nextStatus } })
         .then(() => renderReferralDetail(referralStatusButton.dataset.referralId, `Referral status changed to ${referralStatusLabel(nextStatus)}.`))
         .catch(error => { referralStatusButton.disabled = false; window.alert(error.message); });
+    }
+    const simulateReferralButton = event.target.closest('[data-simulate-referral-status]');
+    if (simulateReferralButton) {
+      const nextStatus = simulateReferralButton.dataset.simulateReferralStatus;
+      if (!window.confirm(`Simulate the fictional recipient changing this referral to “${referralStatusLabel(nextStatus)}”?`)) return;
+      simulateReferralButton.disabled = true;
+      return void adminRequest('/api/referrals', { method: 'POST', body: { action: 'simulate_recipient_status', referralId: simulateReferralButton.dataset.referralId, status: nextStatus } })
+        .then(() => renderReferralDetail(simulateReferralButton.dataset.referralId, `Fictional recipient response simulated: ${referralStatusLabel(nextStatus)}.`))
+        .catch(error => { simulateReferralButton.disabled = false; window.alert(error.message); });
     }
     const programButton = event.target.closest('[data-program-id]');
     if (programButton) return void renderApplications(programButton.dataset.programId);
@@ -1132,6 +1158,19 @@ function wireInterface() {
       .catch(error => { adminButton.disabled = false; window.alert(error.message); });
   });
   elements.dashboardContent.addEventListener('submit', event => {
+    if (event.target.id === 'demoInboundReferralForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      const values = new FormData(form);
+      setBusy(form, true);
+      return void adminRequest('/api/referrals', { method: 'POST', body: {
+        action: 'create_demo_inbound', senderOrganizationId: values.get('senderOrganizationId'), serviceRequested: values.get('serviceRequested'),
+        clientLabel: values.get('clientLabel'), urgency: values.get('urgency'), summary: values.get('summary'),
+        consentConfirmed: values.get('consentConfirmed') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+      } }).then(({ referral }) => renderReferralDetail(referral.id, 'Fictional agency-to-MMS referral generated.'))
+        .catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
     if (event.target.id === 'referralCreateForm') {
       event.preventDefault();
       const form = event.target;
@@ -1243,6 +1282,14 @@ function wireInterface() {
     if (event.target.id === 'additionalHelpNeeded') {
       const fields = elements.dashboardContent.querySelector('[data-additional-support-fields]');
       if (fields) fields.hidden = event.target.value !== 'true';
+    }
+    if (event.target.id === 'demoSenderOrganization') {
+      const selectedServices = new Set(event.target.selectedOptions[0]?.dataset.demoServices?.split(',').filter(Boolean) || []);
+      const serviceSelect = document.getElementById('demoReferralService');
+      if (serviceSelect) {
+        [...serviceSelect.options].forEach(option => { if (option.value) option.disabled = !selectedServices.has(option.value); });
+        serviceSelect.value = '';
+      }
     }
   });
   document.getElementById('menuButton').addEventListener('click', () => elements.dashboard.classList.toggle('nav-open'));

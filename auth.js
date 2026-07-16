@@ -1,4 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/+esm';
+import { getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
 
 const elements = {
   loading: document.getElementById('loadingScreen'),
@@ -19,7 +20,7 @@ let currentProfile;
 const dashboardViews = {
   applications: {
     title: 'Applications',
-    description: 'Your Medicaid applications and progress will appear here after secure intake is enabled.',
+    description: 'Review the NCDHHS policy-guided intake pathways before secure intake is enabled.',
     empty: 'No applications have been started.'
   },
   documents: {
@@ -367,6 +368,54 @@ async function renderOrganizationApprovals(notice = '') {
   }
 }
 
+function renderApplications(selectedProgramId = '') {
+  elements.headerViewName.textContent = 'Applications';
+  const groups = [...new Set(medicaidPrograms.map(program => program.group))];
+  const selected = getProgram(selectedProgramId);
+  const checklist = selected ? getProgramSections(selected.id) : [];
+  const sources = selected ? getProgramSources(selected.id) : [];
+
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading">
+      <p class="eyebrow">NCDHHS policy guide</p>
+      <h1>Choose an intake pathway</h1>
+      <p>This preview maps each NC Medicaid pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.</p>
+    </section>
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Preview with test scenarios only.</strong><p>Do not enter names, dates of birth, Social Security numbers, medical details, income, resources, or other confidential information. This release does not collect or save answers.</p></div></div>
+    <section class="policy-summary" aria-label="Policy release information">
+      <div><span>Policy set</span><strong>NCDHHS ${escapeHtml(policyRelease.version)}</strong></div>
+      <div><span>Reviewed</span><strong>${escapeHtml(policyRelease.reviewedOn)}</strong></div>
+      <div><span>Decision maker</span><strong>NC Medicaid / County DSS</strong></div>
+    </section>
+    ${groups.map(group => `
+      <section class="program-group">
+        <h2>${escapeHtml(group)}</h2>
+        <div class="program-grid">
+          ${medicaidPrograms.filter(program => program.group === group).map(program => `
+            <article class="program-card${selected?.id === program.id ? ' selected' : ''}">
+              <h3>${escapeHtml(program.title)}</h3>
+              <p>${escapeHtml(program.audience)}</p>
+              <small>Policy: ${escapeHtml(program.manualRefs.join(', '))}</small>
+              <button type="button" data-program-id="${escapeHtml(program.id)}">View intake map</button>
+            </article>`).join('')}
+        </div>
+      </section>`).join('')}
+    ${selected ? `
+      <section class="intake-map" id="intakeMap" tabindex="-1">
+        <div class="intake-map-heading">
+          <div><p class="eyebrow">Selected pathway</p><h2>${escapeHtml(selected.title)}</h2><p>${escapeHtml(selected.audience)}</p></div>
+          <span class="status-pill">Policy preview</span>
+        </div>
+        <p class="policy-notice">${escapeHtml(policyRelease.notice)}</p>
+        <ol class="intake-section-list">
+          ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${escapeHtml(section.policy.join(' · '))}</small></div></li>`).join('')}
+        </ol>
+        <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><p>Income and resource standards change. MMS Connect will reference the current NCDHHS tables instead of treating a displayed amount as an eligibility decision.</p></div>
+      </section>` : ''}`;
+
+  if (selected) document.getElementById('intakeMap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderPlaceholder(view) {
   const item = dashboardViews[view];
   elements.headerViewName.textContent = item.title;
@@ -380,6 +429,7 @@ function openDashboardView(view) {
   elements.dashboard.classList.remove('nav-open');
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
+  else if (view === 'applications' && !isPrivilegedRole(currentProfile?.account_type)) renderApplications();
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);
@@ -434,6 +484,8 @@ function wireInterface() {
   elements.dashboardContent.addEventListener('click', event => {
     const button = event.target.closest('[data-open-view]');
     if (button) return openDashboardView(button.dataset.openView);
+    const programButton = event.target.closest('[data-program-id]');
+    if (programButton) return renderApplications(programButton.dataset.programId);
     const adminButton = event.target.closest('[data-admin-action]');
     if (!adminButton) return;
     const action = adminButton.dataset.adminAction;

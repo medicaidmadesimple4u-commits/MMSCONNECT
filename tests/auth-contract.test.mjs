@@ -33,7 +33,32 @@ test('browser auth uses supported Supabase operations', async () => {
   assert.match(script, /MMS Connect Staff Portal/);
   assert.match(script, /organization_approvals/);
   assert.match(script, /staff_management/);
+  assert.match(script, /renderApplications/);
+  assert.match(script, /data-program-id/);
   assert.doesNotMatch(script, /service[_-]?role/i);
+});
+
+test('policy-guided intake covers the principal NCDHHS pathways', async () => {
+  const policy = await import(new URL('../intake-policy.js', import.meta.url));
+  const expected = [
+    'expansion_adult', 'infants_children', 'pregnancy', 'caretaker', 'former_foster',
+    'family_planning', 'breast_cervical', 'aged_blind_disabled', 'medicare_savings',
+    'working_disabled', 'long_term_care', 'cap', 'pace', 'innovations', 'tbi',
+    'special_assistance_facility', 'special_assistance_in_home'
+  ];
+  assert.deepEqual(policy.medicaidPrograms.map(program => program.id), expected);
+  for (const program of policy.medicaidPrograms) {
+    assert.ok(program.manualRefs.length, `${program.id} needs a manual reference`);
+    assert.ok(policy.getProgramSections(program.id).length >= 8, `${program.id} needs a complete intake map`);
+    assert.ok(policy.getProgramSources(program.id).every(source => /^(https:\/\/medicaid\.ncdhhs\.gov|https:\/\/policies\.ncdhhs\.gov)/.test(source.url)));
+  }
+});
+
+test('intake preview does not collect or persist confidential answers', async () => {
+  const [script, policy] = await Promise.all([read('auth.js'), read('intake-policy.js')]);
+  assert.match(script, /This release does not collect or save answers/);
+  assert.doesNotMatch(script, /from\(['"]applications['"]\)|localStorage|sessionStorage/);
+  assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
 });
 
 test('database schema enables RLS and prevents privileged self-registration', async () => {

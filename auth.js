@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/+esm';
-import { getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
+import { dssForms, getPolicyReferenceUrl, getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
 
 const elements = {
   loading: document.getElementById('loadingScreen'),
@@ -374,6 +374,10 @@ function programTitle(programId) {
   return getProgram(programId)?.title || 'NC Medicaid pathway';
 }
 
+function policyReferenceLinks(references) {
+  return references.map(reference => `<a href="${escapeHtml(getPolicyReferenceUrl(reference))}" target="_blank" rel="noopener noreferrer">${escapeHtml(reference)}</a>`).join(' · ');
+}
+
 async function loadOwnedTestApplications() {
   if (!isPrivilegedRole(currentProfile?.account_type)) return [];
   const { applications } = await adminRequest('/api/intake/test-applications');
@@ -382,7 +386,7 @@ async function loadOwnedTestApplications() {
 
 function renderTestApplicationList(applications) {
   if (!applications.length) return '<p class="admin-empty">No fictional test applications have been started.</p>';
-  return `<div class="test-application-list">${applications.map(application => `<article><div><strong>${escapeHtml(application.applicant_name || programTitle(application.program_id))}</strong><span>${escapeHtml(programTitle(application.program_id))} · ${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><button type="button" ${application.status === 'draft' ? `data-resume-test-application="${escapeHtml(application.id)}">Resume test` : `data-review-test-application="${escapeHtml(application.id)}">Review`}</button></article>`).join('')}</div>`;
+  return `<div class="test-application-list">${applications.map(application => `<article><div><strong>${escapeHtml(application.applicant_name || programTitle(application.program_id))}</strong><span>${escapeHtml(programTitle(application.program_id))} · ${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><div class="test-case-actions"><button type="button" ${application.status === 'draft' ? `data-resume-test-application="${escapeHtml(application.id)}">Resume` : `data-review-test-application="${escapeHtml(application.id)}">Review`}</button><button type="button" data-reset-test-application="${escapeHtml(application.id)}" data-return-view="applications">Reset</button><button class="danger" type="button" data-delete-test-application="${escapeHtml(application.id)}" data-return-view="applications">Delete</button></div></article>`).join('')}</div>`;
 }
 
 async function renderApplications(selectedProgramId = '', notice = '') {
@@ -421,7 +425,7 @@ async function renderApplications(selectedProgramId = '', notice = '') {
             <article class="program-card${selected?.id === program.id ? ' selected' : ''}">
               <h3>${escapeHtml(program.title)}</h3>
               <p>${escapeHtml(program.audience)}</p>
-              <small>Policy: ${escapeHtml(program.manualRefs.join(', '))}</small>
+              <small>Policy: ${policyReferenceLinks(program.manualRefs)}</small>
               <button type="button" data-program-id="${escapeHtml(program.id)}">View intake map</button>
             </article>`).join('')}
         </div>
@@ -434,10 +438,10 @@ async function renderApplications(selectedProgramId = '', notice = '') {
         </div>
         <p class="policy-notice">${escapeHtml(policyRelease.notice)}</p>
         <ol class="intake-section-list">
-          ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${escapeHtml(section.policy.join(' · '))}</small></div></li>`).join('')}
+          ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${policyReferenceLinks(section.policy)}</small></div></li>`).join('')}
         </ol>
         ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the first protected screen</strong><p>Create a staging-only draft and use fictional information to test save and resume.</p></div><button class="button primary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start fictional test</button></div>` : ''}
-        <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><p>Income and resource standards change. MMS Connect will reference the current NCDHHS tables instead of treating a displayed amount as an eligibility decision.</p></div>
+        <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><h3>Official NC Medicaid and DSS forms</h3><div class="official-form-grid">${dssForms.map(form => `<a href="${escapeHtml(form.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(form.title)}</strong><span>Open official form ↗</span></a>`).join('')}</div><p>Income and resource standards change. MMS Connect links to current official sources instead of treating a displayed amount as an eligibility decision.</p></div>
       </section>` : ''}`;
 
   if (selected) document.getElementById('intakeMap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -693,7 +697,7 @@ async function renderApplicationQueue(notice = '') {
   elements.headerViewName.textContent = 'Pending Applications';
   const { applications = [] } = await adminRequest('/api/intake/test-applications');
   const queue = currentProfile?.account_type === 'administrator' ? applications.filter(item => item.status !== 'draft') : applications.filter(item => item.status !== 'draft');
-  elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">MMS staging review</p><h1>Application Queue</h1><p>Review fictional submissions without exposing the queue to public or organization accounts.</p></section>${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}<div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional test records only.</strong><p>No item in this queue is an official Medicaid application or eligibility decision.</p></div></div><section class="admin-panel"><h2>Submitted test applications</h2>${queue.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Applicant</th><th>Pathway</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody>${queue.map(item => `<tr><td>${escapeHtml(item.applicant_name)}</td><td>${escapeHtml(programTitle(item.program_id))}</td><td><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></td><td>${escapeHtml(formatAccountDate(item.updated_at))}</td><td class="admin-actions"><button type="button" data-review-test-application="${escapeHtml(item.id)}">Open review</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="admin-empty">No fictional applications have been submitted for review.</p>'}</section>`;
+  elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">MMS staging review</p><h1>Application Queue</h1><p>Review fictional submissions without exposing the queue to public or organization accounts.</p></section>${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}<div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional test records only.</strong><p>No item in this queue is an official Medicaid application or eligibility decision.</p></div></div><section class="admin-panel"><h2>Submitted test applications</h2>${queue.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Applicant</th><th>Pathway</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${queue.map(item => `<tr><td>${escapeHtml(item.applicant_name)}</td><td>${escapeHtml(programTitle(item.program_id))}</td><td><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></td><td>${escapeHtml(formatAccountDate(item.updated_at))}</td><td class="admin-actions"><button type="button" data-review-test-application="${escapeHtml(item.id)}">Open review</button><button type="button" data-reset-test-application="${escapeHtml(item.id)}" data-return-view="queue">Reset</button><button type="button" data-delete-test-application="${escapeHtml(item.id)}" data-return-view="queue">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="admin-empty">No fictional applications have been submitted for review.</p>'}</section>`;
 }
 
 async function saveResidency(form) {
@@ -847,6 +851,22 @@ function wireInterface() {
     if (resumeTestButton) return void renderApplicantInformation(resumeTestButton.dataset.resumeTestApplication).catch(error => window.alert(error.message));
     const reviewTestButton = event.target.closest('[data-review-test-application]');
     if (reviewTestButton) return void renderApplicationReview(reviewTestButton.dataset.reviewTestApplication).catch(error => window.alert(error.message));
+    const resetTestButton = event.target.closest('[data-reset-test-application]');
+    if (resetTestButton) {
+      if (!window.confirm('Reset this fictional case? All entered test information will be removed and the pathway will return to a blank draft.')) return;
+      resetTestButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'reset', applicationId: resetTestButton.dataset.resetTestApplication, fictionalConfirmation: true } })
+        .then(() => resetTestButton.dataset.returnView === 'queue' ? renderApplicationQueue('Fictional test case reset to a blank draft.') : renderApplications('', 'Fictional test case reset to a blank draft.'))
+        .catch(error => { resetTestButton.disabled = false; window.alert(error.message); });
+    }
+    const deleteTestButton = event.target.closest('[data-delete-test-application]');
+    if (deleteTestButton) {
+      if (!window.confirm('Permanently delete this fictional test case? This cannot be undone.')) return;
+      deleteTestButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_application', applicationId: deleteTestButton.dataset.deleteTestApplication, fictionalConfirmation: true } })
+        .then(() => deleteTestButton.dataset.returnView === 'queue' ? renderApplicationQueue('Fictional test case deleted.') : renderApplications('', 'Fictional test case deleted.'))
+        .catch(error => { deleteTestButton.disabled = false; window.alert(error.message); });
+    }
     if (event.target.closest('[data-back-intake-programs]')) return void renderApplications();
     const stepButton = event.target.closest('[data-open-test-step]');
     if (stepButton) {

@@ -40,6 +40,34 @@ export const policySources = {
   }
 };
 
+export const dssForms = [
+  { title: 'Full NC Medicaid Application (DHB-5200)', url: 'https://policies.ncdhhs.gov/wp-content/uploads/dhb-5200-ia-9-2020.pdf' },
+  { title: 'Single Adult Short Form (DHB-5201-ia)', url: 'https://policies.ncdhhs.gov/wp-content/uploads/DHB-5201-ia.pdf' },
+  { title: 'Health Coverage from Jobs — Appendix A', url: 'https://policies.ncdhhs.gov/wp-content/uploads/dma-5202A-ia.pdf' },
+  { title: 'Authorized Representative — Appendix C', url: 'https://policies.ncdhhs.gov/wp-content/uploads/Appendix-C_10-2022.pdf' },
+  { title: 'Income and Resources — Appendix D', url: 'https://policies.ncdhhs.gov/wp-content/uploads/dma-5202D-ia.pdf' },
+  { title: 'Past Medical Bills — Appendix E', url: 'https://policies.ncdhhs.gov/wp-content/uploads/Appendix-E-9-2021.pdf' },
+  { title: 'North Carolina Local DSS Directory', url: 'https://www.ncdhhs.gov/divisions/social-services/local-dss-directory' },
+  { title: 'Apply Online through ePASS', url: 'https://epass.nc.gov/' }
+];
+
+const formReferenceLinks = {
+  'NC Medicaid application': dssForms[0].url,
+  'NC Medicaid application instructions': policySources.apply.url,
+  'DMA-5202-A': dssForms[2].url,
+  'DHB-5202C-ia': dssForms[3].url,
+  'DMA-5202D-ia': dssForms[4].url,
+  'DHB-5202E-ia': dssForms[5].url
+};
+
+export function getPolicyReferenceUrl(reference) {
+  if (formReferenceLinks[reference]) return formReferenceLinks[reference];
+  if (reference.startsWith('SA-') || reference.includes('FL-2')) return policySources.specialAssistance.url;
+  if (reference.startsWith('MA-3') || reference.includes('MAGI') || reference.includes('Third-party')) return policySources.familyManual.url;
+  if (reference.startsWith('MA-2')) return policySources.adultManual.url;
+  return policySources.apply.url;
+}
+
 export const intakeSections = {
   applicant: {
     title: 'Applicant information',

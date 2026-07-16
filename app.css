@@ -326,6 +326,7 @@ a { color: var(--blue); text-underline-offset: 3px; }
 .program-card h3 { margin: 0; color: var(--navy); font-size: 1rem; }
 .program-card p { margin: 9px 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .program-card small { display: block; margin-top: auto; color: #667789; font-size: .7rem; }
+.program-card small a, .intake-section-list small a { color: var(--teal); font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }
 .program-card button { align-self: start; margin-top: 15px; padding: 8px 11px; color: var(--blue); background: #fff; border: 1px solid #b9c9d6; border-radius: 7px; font-size: .76rem; font-weight: 800; cursor: pointer; }
 .program-card button:hover { background: var(--sky); }
 .intake-map { margin-top: 40px; padding: clamp(20px, 4vw, 34px); scroll-margin-top: 20px; background: #fff; border: 1px solid var(--line); border-radius: 15px; box-shadow: var(--shadow); }
@@ -345,6 +346,11 @@ a { color: var(--blue); text-underline-offset: 3px; }
 .policy-sources li { margin: 6px 0; font-size: .8rem; }
 .policy-sources a { color: var(--blue); font-weight: 800; }
 .policy-sources p { margin: 13px 0 0; color: var(--muted); font-size: .78rem; }
+.policy-sources h3:not(:first-child) { margin-top: 22px; }
+.official-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+.official-form-grid > a { display: grid; gap: 4px; padding: 12px 13px; color: var(--navy); text-decoration: none; background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; }
+.official-form-grid > a:hover { border-color: var(--teal); background: var(--teal-soft); }
+.official-form-grid span { color: var(--blue); font-size: .72rem; font-weight: 800; }
 .test-application-panel { margin: 24px 0 30px; padding: 22px; background: #fff; border: 1px solid var(--line); border-radius: 13px; }
 .test-application-panel h2 { margin: 0; color: var(--navy); font-size: 1.08rem; }
 .test-application-panel > div > p:not(.eyebrow) { margin: 6px 0 17px; color: var(--muted); font-size: .82rem; }
@@ -353,6 +359,8 @@ a { color: var(--blue); text-underline-offset: 3px; }
 .test-application-list article > div { display: grid; gap: 3px; }
 .test-application-list span { color: var(--muted); font-size: .74rem; text-transform: capitalize; }
 .test-application-list button { padding: 7px 10px; color: var(--blue); background: #fff; border: 1px solid #b9c9d6; border-radius: 6px; font-size: .74rem; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.test-case-actions { display: flex; flex-wrap: wrap; gap: 7px; justify-content: flex-end; }
+.test-application-list button.danger { color: #9b2c2c; border-color: #e5b7b7; }
 .intake-test-action { display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-top: 22px; padding: 18px; color: var(--navy); background: var(--teal-soft); border: 1px solid #b9ddd7; border-radius: 10px; }
 .intake-test-action p { margin: 4px 0 0; color: var(--muted); font-size: .8rem; }
 .intake-form-panel { max-width: 940px; margin-top: 24px; padding: clamp(20px, 4vw, 32px); background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
@@ -408,7 +416,7 @@ a { color: var(--blue); text-underline-offset: 3px; }
 @media (max-width: 560px) {
   .auth-main { padding: 28px 18px 20px; }
   .two-fields, .three-fields, .dashboard-grid { grid-template-columns: 1fr; }
-  .program-grid, .policy-summary { grid-template-columns: 1fr; }
+  .program-grid, .policy-summary, .official-form-grid { grid-template-columns: 1fr; }
   .review-grid { grid-template-columns: 1fr; }
   .dashboard-header { padding-inline: 14px; }
   .text-button { padding-inline: 3px; }

@@ -54,6 +54,9 @@ test('policy-guided intake covers the principal NCDHHS pathways', async () => {
     assert.ok(policy.getProgramSections(program.id).length >= 8, `${program.id} needs a complete intake map`);
     assert.ok(policy.getProgramSources(program.id).every(source => /^(https:\/\/medicaid\.ncdhhs\.gov|https:\/\/policies\.ncdhhs\.gov)/.test(source.url)));
   }
+  assert.ok(policy.dssForms.length >= 7);
+  assert.ok(policy.dssForms.every(form => /^https:\/\/(policies\.ncdhhs\.gov|www\.ncdhhs\.gov|epass\.nc\.gov)/.test(form.url)));
+  for (const reference of ['MA-2230', 'DMA-5202-A', 'DHB-5202C-ia', 'DMA-5202D-ia', 'DHB-5202E-ia']) assert.match(policy.getPolicyReferenceUrl(reference), /^https:\/\//);
 });
 
 test('intake testing is marked fictional and avoids browser persistence', async () => {
@@ -63,7 +66,9 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   assert.match(script, /isPrivilegedRole\(currentProfile\?\.account_type\)/);
   assert.match(script, /\/api\/intake\/test-applications/);
   for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm', 'resourceForm', 'livingArrangementForm', 'healthCoverageForm', 'authorizedRepresentativeForm', 'reviewStatusForm']) assert.match(script, new RegExp(formId));
-  for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status']) assert.match(script, new RegExp(action));
+  for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status', 'reset', 'delete_application']) assert.match(script, new RegExp(action));
+  assert.match(script, /policyReferenceLinks/);
+  assert.match(script, /Official NC Medicaid and DSS forms/);
   assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
@@ -110,6 +115,18 @@ test('completed intake sections and review workflow remain server-only and audit
   assert.match(api, /details\.completion\.ready/);
   assert.match(script, /renderApplicationQueue/);
   assert.match(script, /This does not submit anything to NC Medicaid or a county DSS/);
+});
+
+test('fictional cases can be reset or deleted through the protected server endpoint', async () => {
+  const [api, resetSql] = await Promise.all([
+    read('api/intake/test-applications.js'), read('supabase/migrations/20260716230000_add_test_application_reset_audit.sql')
+  ]);
+  assert.match(api, /action === 'reset' \|\| action === 'delete_application'/);
+  assert.match(api, /accessibleApplication\(staff, applicationId\)/);
+  assert.match(api, /application_authorized_representatives/);
+  assert.match(api, /application_applicants/);
+  assert.match(api, /application_reset/);
+  assert.match(resetSql, /application_reset/);
 });
 
 test('database schema enables RLS and prevents privileged self-registration', async () => {

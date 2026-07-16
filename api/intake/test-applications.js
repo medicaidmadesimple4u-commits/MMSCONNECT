@@ -102,6 +102,24 @@ export default async function handler(request, response) {
     const applicationId = String(body.applicationId || '');
     if (!validUuid(applicationId)) return sendJson(response, 400, { error: 'Select a valid fictional application.' });
 
+    if (action === 'reset' || action === 'delete_application') {
+      const application = await accessibleApplication(staff, applicationId);
+      if (!application || !confirmedFictional(body)) return sendJson(response, 400, { error: 'Select an accessible fictional test application and confirm the action.' });
+      if (action === 'delete_application') {
+        await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
+        return sendJson(response, 200, { deleted: true });
+      }
+      for (const table of [
+        'application_authorized_representatives', 'application_health_coverage', 'application_resources', 'application_living_arrangements',
+        'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
+      ]) {
+        await serviceRequest(`/rest/v1/${table}?application_id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
+      }
+      const updated = await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'draft' } });
+      await auditStatus(application.id, staff.user.id, 'application_reset');
+      return sendJson(response, 200, { application: updated?.[0] });
+    }
+
     if (action === 'review_status') {
       if (staff.profile.account_type !== 'administrator') return sendJson(response, 403, { error: 'Administrator access is required to change review status.' });
       const application = await testApplication(applicationId);

@@ -26,10 +26,11 @@ This release uses hosted Supabase Auth. Do not enable registration until these s
 4. In Vercel Project Settings → Environment Variables, add:
    - `SUPABASE_URL` = `https://abquqllondntucfoosdv.supabase.co`
    - `SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` as a **Sensitive** server-only value
 5. Apply the variables to Production and Preview environments, then redeploy.
 6. Test registration, verification, sign-in, sign-out, password reset, and unauthorized dashboard access using test accounts only.
 
-The publishable key is intended for browser use and is returned by `api/config.js`. Never add the Supabase service-role key to this repository, browser code, or a public environment variable.
+The publishable key is intended for browser use and is returned by `api/config.js`. The service-role key is used only by protected Vercel administrator functions. Never add its real value to this repository, browser code, logs, or a public environment variable.
 
 ## Protected-data boundary
 

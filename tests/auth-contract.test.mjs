@@ -44,6 +44,24 @@ test('database schema enables RLS and prevents privileged self-registration', as
   assert.doesNotMatch(sql, /requested_type not in \([^)]*staff/i);
   assert.match(sql, /revoke update on table public\.profiles from authenticated/i);
   assert.match(sql, /grant update \(first_name, last_name, organization_name, phone\)/i);
+  assert.match(sql, /create table if not exists public\.admin_audit_log/i);
+  assert.match(sql, /alter table public\.admin_audit_log enable row level security/i);
+  assert.match(sql, /revoke all on table public\.admin_audit_log from anon, authenticated/i);
+});
+
+test('administrator APIs verify roles and keep privileged credentials server-side', async () => {
+  const [library, accounts, invite, update] = await Promise.all([
+    read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js')
+  ]);
+  assert.match(library, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(library, /profile\.account_type !== 'administrator'/);
+  assert.match(accounts, /requireAdministrator/);
+  assert.match(invite, /requireAllowedOrigin/);
+  assert.match(invite, /writeAudit/);
+  assert.match(update, /targetId === administrator\.user\.id/);
+  assert.match(update, /writeAudit/);
+  const browserScript = await read('auth.js');
+  assert.doesNotMatch(browserScript, /SUPABASE_SERVICE_ROLE_KEY|service[_-]?role/i);
 });
 
 test('Vercel configuration applies baseline browser security headers', async () => {

@@ -83,6 +83,29 @@ function escapeHtml(value = '') {
   return String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
 
+async function adminRequest(path, options = {}) {
+  const { data } = await supabaseClient.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) throw new Error('Your session has expired. Sign in again.');
+  const response = await fetch(path, {
+    method: options.method || 'GET',
+    headers: { Authorization: `Bearer ${accessToken}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}) },
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'The administrator request could not be completed.');
+  return payload;
+}
+
+function formatAccountDate(value) {
+  if (!value) return '—';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+}
+
+function accountDisplayName(account) {
+  return `${account.first_name || ''} ${account.last_name || ''}`.trim() || account.email || 'MMS Connect User';
+}
+
 function setBusy(form, busy) {
   const button = form.querySelector('button[type="submit"]');
   if (!button) return;
@@ -311,6 +334,39 @@ function renderProfile() {
     </section>`;
 }
 
+function renderAuditHistory(audit = []) {
+  if (!audit.length) return '<p class="admin-empty">No administrator actions have been recorded yet.</p>';
+  return `<div class="audit-list">${audit.map(item => `<div class="audit-item"><strong>${escapeHtml(item.action.replaceAll('_', ' '))}</strong><span>${escapeHtml(item.details?.email || item.target_id || 'Account')}</span><time>${escapeHtml(formatAccountDate(item.created_at))}</time></div>`).join('')}</div>`;
+}
+
+async function renderStaffManagement(notice = '') {
+  elements.headerViewName.textContent = 'Staff Management';
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Administrator</p><h1>Staff Management</h1><p>Invite MMS staff and manage privileged access. Staff and administrator roles are never available through public registration.</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <section class="admin-panel"><h2>Invite a staff member</h2><form id="inviteStaffForm" class="admin-form"><div class="two-fields"><div class="field"><label for="staffFirstName">First name</label><input id="staffFirstName" name="firstName" maxlength="80" required></div><div class="field"><label for="staffLastName">Last name</label><input id="staffLastName" name="lastName" maxlength="80" required></div></div><div class="two-fields"><div class="field"><label for="staffEmail">Work email</label><input id="staffEmail" name="email" type="email" required></div><div class="field"><label for="staffRole">Access level</label><select id="staffRole" name="role"><option value="staff">MMS Staff</option><option value="administrator">Administrator</option></select></div></div><button class="button primary" type="submit">Send secure invitation</button><p class="field-help">The invitation link lets the staff member establish their own password.</p></form></section>
+    <section class="admin-panel"><h2>Current staff access</h2><div id="staffAccounts"><p class="admin-empty">Loading staff accounts…</p></div></section>
+    <section class="admin-panel"><h2>Recent access history</h2><div id="staffAudit"><p class="admin-empty">Loading history…</p></div></section>`;
+  try {
+    const { accounts, audit } = await adminRequest('/api/admin/accounts?scope=staff');
+    document.getElementById('staffAccounts').innerHTML = accounts.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Added</th><th>Actions</th></tr></thead><tbody>${accounts.map(account => { const self = account.id === currentUser?.id; const roleAction = account.account_type === 'administrator' ? 'staff' : 'administrator'; return `<tr><td>${escapeHtml(accountDisplayName(account))}${self ? ' <small>(you)</small>' : ''}</td><td>${escapeHtml(account.email)}</td><td>${escapeHtml(roleLabel(account.account_type))}</td><td>${escapeHtml(account.status)}</td><td>${escapeHtml(formatAccountDate(account.created_at))}</td><td class="admin-actions">${self ? '<span>Protected</span>' : `<button type="button" data-admin-action="set_role" data-target-id="${account.id}" data-role="${roleAction}">Set ${escapeHtml(roleLabel(roleAction))}</button><button type="button" data-admin-action="${account.status === 'active' ? 'suspend_account' : 'restore_account'}" data-target-id="${account.id}">${account.status === 'active' ? 'Suspend' : 'Restore'}</button>`}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="admin-empty">No staff accounts have been invited yet.</p>';
+    document.getElementById('staffAudit').innerHTML = renderAuditHistory(audit);
+  } catch (error) {
+    document.getElementById('staffAccounts').innerHTML = `<div class="form-message error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function renderOrganizationApprovals(notice = '') {
+  elements.headerViewName.textContent = 'Organization Approvals';
+  elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">Administrator</p><h1>Organization Approvals</h1><p>Review agency and facility registrations before organization features are enabled.</p></section>${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}<div class="safety-banner"><span aria-hidden="true">i</span><div><strong>Verify organizations outside MMS Connect.</strong><p>Confirm the organization and representative using trusted business contact information before approval.</p></div></div><section class="admin-panel"><h2>Agency and facility accounts</h2><div id="organizationAccounts"><p class="admin-empty">Loading organization accounts…</p></div></section>`;
+  try {
+    const { accounts } = await adminRequest('/api/admin/accounts?scope=organization');
+    document.getElementById('organizationAccounts').innerHTML = accounts.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Organization</th><th>Representative</th><th>Type</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead><tbody>${accounts.map(account => `<tr><td>${escapeHtml(account.organization_name || 'Not provided')}</td><td>${escapeHtml(accountDisplayName(account))}</td><td>${escapeHtml(roleLabel(account.account_type))}</td><td>${escapeHtml(account.email)}${account.email_verified ? ' <small>Verified</small>' : ' <small>Unverified</small>'}</td><td>${escapeHtml(account.status)}</td><td class="admin-actions">${account.status !== 'active' ? `<button type="button" data-admin-action="approve_organization" data-target-id="${account.id}">Approve</button>` : ''}${account.status === 'pending' ? `<button type="button" data-admin-action="suspend_account" data-target-id="${account.id}">Reject</button>` : account.status === 'active' ? `<button type="button" data-admin-action="suspend_account" data-target-id="${account.id}">Suspend</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="admin-empty">No agency or facility registrations are waiting for review.</p>';
+  } catch (error) {
+    document.getElementById('organizationAccounts').innerHTML = `<div class="form-message error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 function renderPlaceholder(view) {
   const item = dashboardViews[view];
   elements.headerViewName.textContent = item.title;
@@ -324,6 +380,8 @@ function openDashboardView(view) {
   elements.dashboard.classList.remove('nav-open');
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
+  else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
+  else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);
   elements.dashboardContent.focus();
 }
@@ -375,7 +433,28 @@ function wireInterface() {
   });
   elements.dashboardContent.addEventListener('click', event => {
     const button = event.target.closest('[data-open-view]');
-    if (button) openDashboardView(button.dataset.openView);
+    if (button) return openDashboardView(button.dataset.openView);
+    const adminButton = event.target.closest('[data-admin-action]');
+    if (!adminButton) return;
+    const action = adminButton.dataset.adminAction;
+    const targetId = adminButton.dataset.targetId;
+    const role = adminButton.dataset.role;
+    if (action === 'suspend_account' && !window.confirm('Suspend this account? The user will be unable to access MMS Connect.')) return;
+    adminButton.disabled = true;
+    adminRequest('/api/admin/update-account', { method: 'POST', body: { action, targetId, role } })
+      .then(() => openDashboardView(currentProfile?.account_type === 'administrator' && document.getElementById('organizationAccounts') ? 'organization_approvals' : 'staff_management'))
+      .catch(error => { adminButton.disabled = false; window.alert(error.message); });
+  });
+  elements.dashboardContent.addEventListener('submit', event => {
+    if (event.target.id !== 'inviteStaffForm') return;
+    event.preventDefault();
+    const form = event.target;
+    if (!form.reportValidity()) return;
+    const values = new FormData(form);
+    setBusy(form, true);
+    adminRequest('/api/admin/invite-staff', { method: 'POST', body: { firstName: values.get('firstName'), lastName: values.get('lastName'), email: values.get('email'), role: values.get('role') } })
+      .then(() => renderStaffManagement('The secure staff invitation was sent.'))
+      .catch(error => { setBusy(form, false); window.alert(error.message); });
   });
   document.getElementById('menuButton').addEventListener('click', () => elements.dashboard.classList.toggle('nav-open'));
   document.getElementById('signOutButton').addEventListener('click', async () => {

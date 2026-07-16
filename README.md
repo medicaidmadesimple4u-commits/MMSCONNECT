@@ -11,6 +11,7 @@ MMS Connect is the client and authorized-representative portal for Medicaid Made
 - Client and Authorized Representative account types
 - Protected dashboard shell
 - NCDHHS policy-guided intake pathway preview
+- Staff-only fictional intake testing with protected save and resume
 - Applications, Documents, Messages, Community Referrals, Profile, and Settings navigation
 - Confidential-data collection intentionally disabled
 
@@ -38,6 +39,8 @@ The publishable key is intended for browser use and is returned by `api/config.j
 This authentication release is not approved to collect Social Security numbers, medical information, financial records, Medicaid applications, or documents. Those features remain disabled until the production environment, vendor agreements, access policies, audit controls, retention procedures, and security review are complete.
 
 The program-to-question mapping is documented in [docs/NCDHHS_POLICY_MAP.md](docs/NCDHHS_POLICY_MAP.md). The intake preview uses official NCDHHS manuals and current 2026 limit-table sources without making an eligibility determination or saving confidential answers.
+
+The first applicant-information screen is restricted to fictional staging tests by active MMS staff and administrators. Its database and row-level access boundary are documented in [docs/INTAKE_SECURITY.md](docs/INTAKE_SECURITY.md). It must not be used for real applicant information.
 
 Supabase documents that organizations handling PHI must have a signed Business Associate Agreement and the HIPAA add-on enabled. Compliance is a shared responsibility and is not created by using a particular software service alone.
 

@@ -370,12 +370,41 @@ async function renderOrganizationApprovals(notice = '') {
   }
 }
 
-function renderApplications(selectedProgramId = '') {
+function programTitle(programId) {
+  return getProgram(programId)?.title || 'NC Medicaid pathway';
+}
+
+async function loadOwnedTestApplications() {
+  if (!isPrivilegedRole(currentProfile?.account_type)) return [];
+  const { data, error } = await supabaseClient
+    .from('applications')
+    .select('id, program_id, status, policy_version, created_at, updated_at')
+    .eq('owner_id', currentUser.id)
+    .eq('environment', 'staging')
+    .eq('test_mode', true)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+function renderTestApplicationList(applications) {
+  if (!applications.length) return '<p class="admin-empty">No fictional test applications have been started.</p>';
+  return `<div class="test-application-list">${applications.map(application => `<article><div><strong>${escapeHtml(programTitle(application.program_id))}</strong><span>${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><button type="button" data-resume-test-application="${escapeHtml(application.id)}">Resume test</button></article>`).join('')}</div>`;
+}
+
+async function renderApplications(selectedProgramId = '', notice = '') {
   elements.headerViewName.textContent = 'Applications';
   const groups = [...new Set(medicaidPrograms.map(program => program.group))];
   const selected = getProgram(selectedProgramId);
   const checklist = selected ? getProgramSections(selected.id) : [];
   const sources = selected ? getProgramSources(selected.id) : [];
+  const canRunTest = isPrivilegedRole(currentProfile?.account_type);
+  let testApplications = [];
+  let testLoadError = '';
+  if (canRunTest) {
+    try { testApplications = await loadOwnedTestApplications(); }
+    catch { testLoadError = 'The protected test-intake database is not available yet.'; }
+  }
 
   elements.dashboardContent.innerHTML = `
     <section class="content-heading">
@@ -383,7 +412,9 @@ function renderApplications(selectedProgramId = '') {
       <h1>Choose an intake pathway</h1>
       <p>This preview maps each NC Medicaid pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.</p>
     </section>
-    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Preview with test scenarios only.</strong><p>Do not enter names, dates of birth, Social Security numbers, medical details, income, resources, or other confidential information. This release does not collect or save answers.</p></div></div>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Preview with test scenarios only.</strong><p>Public intake remains disabled. Only active MMS staff and administrators may save completely fictional staging records for security testing.</p></div></div>
+    ${canRunTest ? `<section class="test-application-panel"><div><p class="eyebrow">Staging security test</p><h2>Fictional test applications</h2><p>Only active MMS staff and administrators can create these staging-only records.</p></div>${testLoadError ? `<div class="form-message error">${escapeHtml(testLoadError)}</div>` : renderTestApplicationList(testApplications)}</section>` : ''}
     <section class="policy-summary" aria-label="Policy release information">
       <div><span>Policy set</span><strong>NCDHHS ${escapeHtml(policyRelease.version)}</strong></div>
       <div><span>Reviewed</span><strong>${escapeHtml(policyRelease.reviewedOn)}</strong></div>
@@ -412,10 +443,83 @@ function renderApplications(selectedProgramId = '') {
         <ol class="intake-section-list">
           ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${escapeHtml(section.policy.join(' · '))}</small></div></li>`).join('')}
         </ol>
+        ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the first protected screen</strong><p>Create a staging-only draft and use fictional information to test save and resume.</p></div><button class="button primary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start fictional test</button></div>` : ''}
         <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><p>Income and resource standards change. MMS Connect will reference the current NCDHHS tables instead of treating a displayed amount as an eligibility decision.</p></div>
       </section>` : ''}`;
 
   if (selected) document.getElementById('intakeMap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function startTestApplication(programId) {
+  const program = getProgram(programId);
+  if (!program || !isPrivilegedRole(currentProfile?.account_type)) throw new Error('This test pathway is not available.');
+  const { data, error } = await supabaseClient.from('applications').insert({
+    owner_id: currentUser.id,
+    program_id: program.id,
+    status: 'draft',
+    policy_version: policyRelease.version,
+    environment: 'staging',
+    test_mode: true
+  }).select('id').single();
+  if (error) throw error;
+  await renderApplicantInformation(data.id);
+}
+
+async function renderApplicantInformation(applicationId, notice = '') {
+  elements.headerViewName.textContent = 'Applicant Information';
+  const { data: application, error: applicationError } = await supabaseClient
+    .from('applications')
+    .select('id, program_id, status, policy_version, environment, test_mode')
+    .eq('id', applicationId)
+    .single();
+  if (applicationError || !application?.test_mode || application.environment !== 'staging') throw new Error('The test application could not be opened.');
+
+  const { data: applicant, error: applicantError } = await supabaseClient
+    .from('application_applicants')
+    .select('legal_first_name, legal_middle_name, legal_last_name, preferred_name, date_of_birth, contact_email, phone, preferred_language, nc_county, applying_for_coverage')
+    .eq('application_id', application.id)
+    .eq('person_order', 1)
+    .maybeSingle();
+  if (applicantError) throw applicantError;
+
+  const value = (key, fallback = '') => escapeHtml(applicant?.[key] ?? fallback);
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Applicant Information</h1><p>${escapeHtml(programTitle(application.program_id))} · Policy ${escapeHtml(application.policy_version)}</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Never enter a real person’s information here.</strong><p>This staging workflow is restricted to MMS staff and administrators for fictional testing. Do not use actual names, birth dates, contact details, case information, or documents.</p></div></div>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 1 of ${getProgramSections(application.program_id).length}</span><strong>Applicant information</strong></div>
+      <form id="applicantInfoForm" data-application-id="${escapeHtml(application.id)}">
+        <fieldset><legend>Fictional applicant name</legend><div class="three-fields"><div class="field"><label for="applicantFirstName">Legal first name</label><input id="applicantFirstName" name="legalFirstName" maxlength="80" value="${value('legal_first_name')}" required></div><div class="field"><label for="applicantMiddleName">Middle name</label><input id="applicantMiddleName" name="legalMiddleName" maxlength="80" value="${value('legal_middle_name')}"></div><div class="field"><label for="applicantLastName">Legal last name</label><input id="applicantLastName" name="legalLastName" maxlength="80" value="${value('legal_last_name')}" required></div></div><div class="field"><label for="applicantPreferredName">Preferred name</label><input id="applicantPreferredName" name="preferredName" maxlength="80" value="${value('preferred_name')}"></div></fieldset>
+        <fieldset><legend>Basic details</legend><div class="two-fields"><div class="field"><label for="applicantDob">Date of birth</label><input id="applicantDob" name="dateOfBirth" type="date" max="${new Date().toISOString().slice(0, 10)}" value="${value('date_of_birth')}" required></div><div class="field"><label for="applicantCounty">North Carolina county</label><input id="applicantCounty" name="ncCounty" maxlength="80" value="${value('nc_county')}"></div></div><div class="two-fields"><div class="field"><label for="applicantLanguage">Preferred language</label><input id="applicantLanguage" name="preferredLanguage" maxlength="80" value="${value('preferred_language', 'English')}" required></div><div class="field"><label for="applicantCoverage">Applying for coverage?</label><select id="applicantCoverage" name="applyingForCoverage"><option value="true" ${applicant?.applying_for_coverage !== false ? 'selected' : ''}>Yes</option><option value="false" ${applicant?.applying_for_coverage === false ? 'selected' : ''}>No</option></select></div></div></fieldset>
+        <fieldset><legend>Test contact details</legend><div class="two-fields"><div class="field"><label for="applicantEmail">Email</label><input id="applicantEmail" name="contactEmail" type="email" maxlength="254" value="${value('contact_email')}"></div><div class="field"><label for="applicantPhone">Phone</label><input id="applicantPhone" name="phone" maxlength="30" value="${value('phone')}"></div></div></fieldset>
+        <label class="test-confirmation"><input type="checkbox" name="fictionalConfirmation" required><span>I confirm this is completely fictional test information and does not identify a real person.</span></label>
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-back-intake-programs>Back to intake programs</button><button class="button primary" type="submit">Save test information</button></div>
+      </form>
+    </section>`;
+}
+
+async function saveApplicantInformation(form) {
+  const values = new FormData(form);
+  const applicationId = form.dataset.applicationId;
+  const payload = {
+    application_id: applicationId,
+    person_order: 1,
+    legal_first_name: values.get('legalFirstName').trim(),
+    legal_middle_name: values.get('legalMiddleName').trim() || null,
+    legal_last_name: values.get('legalLastName').trim(),
+    preferred_name: values.get('preferredName').trim() || null,
+    date_of_birth: values.get('dateOfBirth'),
+    contact_email: values.get('contactEmail').trim() || null,
+    phone: values.get('phone').trim() || null,
+    preferred_language: values.get('preferredLanguage').trim(),
+    nc_county: values.get('ncCounty').trim() || null,
+    applying_for_coverage: values.get('applyingForCoverage') === 'true',
+    created_by: currentUser.id
+  };
+  const { error } = await supabaseClient.from('application_applicants').upsert(payload, { onConflict: 'application_id,person_order' });
+  if (error) throw error;
+  await renderApplicantInformation(applicationId, 'Fictional applicant information saved. The audit history was updated.');
 }
 
 function renderPlaceholder(view) {
@@ -431,7 +535,7 @@ function openDashboardView(view) {
   elements.dashboard.classList.remove('nav-open');
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
-  else if (view === 'applications') renderApplications();
+  else if (view === 'applications') void renderApplications();
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);
@@ -487,7 +591,15 @@ function wireInterface() {
     const button = event.target.closest('[data-open-view]');
     if (button) return openDashboardView(button.dataset.openView);
     const programButton = event.target.closest('[data-program-id]');
-    if (programButton) return renderApplications(programButton.dataset.programId);
+    if (programButton) return void renderApplications(programButton.dataset.programId);
+    const startTestButton = event.target.closest('[data-start-test-application]');
+    if (startTestButton) {
+      startTestButton.disabled = true;
+      return void startTestApplication(startTestButton.dataset.startTestApplication).catch(error => { startTestButton.disabled = false; window.alert(error.message); });
+    }
+    const resumeTestButton = event.target.closest('[data-resume-test-application]');
+    if (resumeTestButton) return void renderApplicantInformation(resumeTestButton.dataset.resumeTestApplication).catch(error => window.alert(error.message));
+    if (event.target.closest('[data-back-intake-programs]')) return void renderApplications();
     const adminButton = event.target.closest('[data-admin-action]');
     if (!adminButton) return;
     const action = adminButton.dataset.adminAction;
@@ -500,6 +612,13 @@ function wireInterface() {
       .catch(error => { adminButton.disabled = false; window.alert(error.message); });
   });
   elements.dashboardContent.addEventListener('submit', event => {
+    if (event.target.id === 'applicantInfoForm') {
+      event.preventDefault();
+      const form = event.target;
+      if (!form.reportValidity()) return;
+      setBusy(form, true);
+      return void saveApplicantInformation(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
     if (event.target.id !== 'inviteStaffForm') return;
     event.preventDefault();
     const form = event.target;

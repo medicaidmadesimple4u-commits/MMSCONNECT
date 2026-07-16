@@ -36,7 +36,7 @@ test('browser auth uses supported Supabase operations', async () => {
   assert.match(script, /renderApplications/);
   assert.match(script, /data-program-id/);
   assert.match(script, /\['applications', 'I', 'Intake Programs'\]/);
-  assert.match(script, /else if \(view === 'applications'\) renderApplications\(\)/);
+  assert.match(script, /else if \(view === 'applications'\) void renderApplications\(\)/);
   assert.doesNotMatch(script, /service[_-]?role/i);
 });
 
@@ -56,11 +56,28 @@ test('policy-guided intake covers the principal NCDHHS pathways', async () => {
   }
 });
 
-test('intake preview does not collect or persist confidential answers', async () => {
+test('intake testing is marked fictional and avoids browser persistence', async () => {
   const [script, policy] = await Promise.all([read('auth.js'), read('intake-policy.js')]);
-  assert.match(script, /This release does not collect or save answers/);
-  assert.doesNotMatch(script, /from\(['"]applications['"]\)|localStorage|sessionStorage/);
+  assert.match(script, /completely fictional staging records/);
+  assert.match(script, /fictionalConfirmation/);
+  assert.match(script, /isPrivilegedRole\(currentProfile\?\.account_type\)/);
+  assert.match(script, /application_applicants/);
+  assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
+});
+
+test('test intake schema enforces staging-only records and row-level access', async () => {
+  const sql = await read('supabase/migrations/20260716174500_add_test_intake_foundation.sql');
+  for (const table of ['applications', 'application_applicants', 'application_assignments', 'application_audit_log']) {
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+  }
+  assert.match(sql, /environment text not null default 'staging' check \(environment = 'staging'\)/i);
+  assert.match(sql, /test_mode boolean not null default true check \(test_mode = true\)/i);
+  assert.match(sql, /and public\.is_active_privileged_user\(\)/i);
+  assert.match(sql, /created_by = \(select auth\.uid\(\)\)/i);
+  assert.match(sql, /revoke all on public\.application_audit_log from anon, authenticated/i);
+  assert.match(sql, /grant select, insert on public\.applications to authenticated/i);
+  assert.doesNotMatch(sql, /grant[^;]*update[^;]*on public\.applications to authenticated/i);
 });
 
 test('database schema enables RLS and prevents privileged self-registration', async () => {

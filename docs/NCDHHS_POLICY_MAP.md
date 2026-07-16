@@ -50,4 +50,4 @@ MMS Connect uses official North Carolina Department of Health and Human Services
 
 ## Release boundary
 
-The current application page is a policy preview. It displays the program-specific intake map but does not collect or save answers. Confidential intake storage remains disabled until access controls, encryption, audit coverage, retention, incident response, vendor agreements, and privacy review are approved.
+The application page includes a policy preview plus a staff-only staging workflow for completely fictional records. It saves applicant, household, income, resource, living-arrangement, insurance, and authorized-representative test data behind server-only access controls and provides an administrator test queue. Public and real-data intake remains disabled until access controls, encryption, audit coverage, retention, incident response, vendor agreements, and privacy review are approved.

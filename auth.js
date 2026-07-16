@@ -382,7 +382,7 @@ async function loadOwnedTestApplications() {
 
 function renderTestApplicationList(applications) {
   if (!applications.length) return '<p class="admin-empty">No fictional test applications have been started.</p>';
-  return `<div class="test-application-list">${applications.map(application => `<article><div><strong>${escapeHtml(programTitle(application.program_id))}</strong><span>${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><button type="button" data-resume-test-application="${escapeHtml(application.id)}">Resume test</button></article>`).join('')}</div>`;
+  return `<div class="test-application-list">${applications.map(application => `<article><div><strong>${escapeHtml(application.applicant_name || programTitle(application.program_id))}</strong><span>${escapeHtml(programTitle(application.program_id))} · ${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><button type="button" ${application.status === 'draft' ? `data-resume-test-application="${escapeHtml(application.id)}">Resume test` : `data-review-test-application="${escapeHtml(application.id)}">Review`}</button></article>`).join('')}</div>`;
 }
 
 async function renderApplications(selectedProgramId = '', notice = '') {
@@ -573,7 +573,127 @@ async function renderIncomeEmployment(applicationId, notice = '', editSourceId =
         <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="household" data-application-id="${escapeHtml(application.id)}">Back to household</button><div>${editing ? `<button class="button secondary" type="button" data-open-test-step="income" data-application-id="${escapeHtml(application.id)}">Cancel edit</button>` : ''}<button class="button primary" type="submit">${editing ? 'Update' : 'Add'} income source</button></div></div>
       </form>
     </section>
-    <div class="policy-notice">MMS Connect does not compare these test amounts with an income limit or decide eligibility. Current NCDHHS policy tables and a county DSS determination control the official result.</div>`;
+    <div class="policy-notice">MMS Connect does not compare these test amounts with an income limit or decide eligibility. Current NCDHHS policy tables and a county DSS determination control the official result.</div>
+    <div class="next-step-bar"><div><strong>Next: Resources &amp; Living Arrangement</strong><p>Record fictional assets and the applicant's current setting.</p></div><button class="button primary" type="button" data-open-test-step="resources" data-application-id="${escapeHtml(application.id)}">Continue</button></div>`;
+}
+
+const resourceTypeLabels = {
+  none: 'No countable resources to report', checking: 'Checking account', savings: 'Savings account', cash: 'Cash', real_property: 'Real property',
+  vehicle: 'Vehicle', trust: 'Trust', life_insurance: 'Life insurance', annuity: 'Annuity', retirement_account: 'Retirement account',
+  burial_asset: 'Burial asset', able_account: 'ABLE account', other: 'Other resource'
+};
+const livingSettingLabels = {
+  own_home: 'Own home', rent_home: 'Rented home', family_home: 'Home of family or friends', nursing_facility: 'Nursing facility', hospital: 'Hospital',
+  adult_care_home: 'Adult care home', assisted_living: 'Assisted living', group_home: 'Group home', without_fixed_address: 'Without a fixed address', other: 'Other setting'
+};
+const careStatusLabels = { not_requested: 'Not requested', pending: 'Pending', approved: 'Approved', unknown: 'Unknown' };
+const fl2StatusLabels = { not_applicable: 'Not applicable', not_available: 'Not available', pending: 'Pending', available: 'Available' };
+const coverageTypeLabels = {
+  none: 'No current health coverage', employer: 'Employer health coverage', medicare_a: 'Medicare Part A', medicare_b: 'Medicare Part B',
+  medicare_d: 'Medicare Part D', medicare_advantage: 'Medicare Advantage', medicaid: 'Medicaid', va: 'VA health coverage', tricare: 'TRICARE',
+  marketplace: 'Marketplace plan', private: 'Private insurance', other: 'Other coverage'
+};
+const representativeTypeLabels = { person: 'Person', organization: 'Organization' };
+const authorityScopeLabels = { application_only: 'Application only', notices_and_application: 'Application and notices', full_case: 'Full case communication' };
+
+async function renderResourcesLiving(applicationId, notice = '', editResourceId = '') {
+  elements.headerViewName.textContent = 'Resources & Living Arrangement';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, resources = [], livingArrangement } = details;
+  const editing = resources.find(resource => resource.id === editResourceId) || null;
+  const resourceRequired = getProgramSections(application.program_id).some(section => section.id === 'resources');
+  const v = (key, fallback = '') => escapeHtml(livingArrangement?.[key] ?? fallback);
+  const currency = value => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(value || 0));
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Resources &amp; Living Arrangement</h1><p>${escapeHtml(programTitle(application.program_id))} · ${resourceRequired ? 'NCDHHS Appendix D and non-MAGI resource pathway' : 'resource information is optional for this pathway'}</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Invent every asset, value, facility, and spouse detail.</strong><p>Do not enter real bank balances, property, trusts, insurance values, facility admissions, or medical level-of-care information.</p></div></div>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 4</span><strong>Financial resources ${resourceRequired ? '(required for this pathway)' : '(optional for this pathway)'}</strong></div>
+      ${resources.length ? `<div class="record-list">${resources.map(resource => `<article><div><strong>${escapeHtml(resourceTypeLabels[resource.resource_type] || resource.resource_type)}</strong><span>${resource.resource_type === 'none' ? 'None reported' : `${escapeHtml(currency(resource.current_value))}${resource.owner_label ? ` · ${escapeHtml(resource.owner_label)}` : ''}`}</span></div><div><button type="button" data-edit-resource="${escapeHtml(resource.id)}" data-application-id="${escapeHtml(application.id)}">Edit</button><button type="button" data-delete-resource="${escapeHtml(resource.id)}" data-application-id="${escapeHtml(application.id)}">Remove</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No fictional resources have been recorded.</p>'}
+      <form id="resourceForm" data-application-id="${escapeHtml(application.id)}" data-resource-id="${escapeHtml(editing?.id || '')}">
+        <fieldset><legend>${editing ? 'Edit' : 'Add'} fictional resource</legend><div class="two-fields"><div class="field"><label for="resourceType">Resource type</label><select id="resourceType" name="resourceType">${optionList(resourceTypeLabels, editing?.resource_type || 'none')}</select></div><div class="field"><label for="resourceValue">Current value</label><input id="resourceValue" name="currentValue" type="number" min="0" step="0.01" value="${escapeHtml(editing?.current_value ?? '0')}" required></div></div><div class="two-fields"><div class="field"><label for="resourceOwner">Fictional owner</label><input id="resourceOwner" name="ownerLabel" maxlength="120" value="${escapeHtml(editing?.owner_label || '')}"></div><div class="field"><label for="resourceDescription">Description</label><input id="resourceDescription" name="description" maxlength="200" value="${escapeHtml(editing?.description || '')}"></div></div><label class="check-row"><input type="checkbox" name="jointlyOwned" ${editing?.jointly_owned ? 'checked' : ''}><span>Jointly owned</span></label></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="income" data-application-id="${escapeHtml(application.id)}">Back to income</button><div>${editing ? `<button class="button secondary" type="button" data-open-test-step="resources" data-application-id="${escapeHtml(application.id)}">Cancel edit</button>` : ''}<button class="button primary" type="submit">${editing ? 'Update' : 'Add'} resource</button></div></div>
+      </form>
+    </section>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 4</span><strong>Living arrangement and facility information</strong></div>
+      <form id="livingArrangementForm" data-application-id="${escapeHtml(application.id)}">
+        <fieldset><legend>Current fictional setting</legend><div class="three-fields"><div class="field"><label for="livingSetting">Living arrangement</label><select id="livingSetting" name="setting">${optionList(livingSettingLabels, livingArrangement?.setting || 'rent_home')}</select></div><div class="field"><label for="facilityName">Facility or setting name</label><input id="facilityName" name="facilityName" maxlength="180" value="${v('facility_name')}"></div><div class="field"><label for="facilityCounty">Facility county</label><input id="facilityCounty" name="facilityCounty" maxlength="80" value="${v('facility_county')}"></div></div><div class="three-fields"><div class="field"><label for="admissionDate">Admission date</label><input id="admissionDate" name="admissionDate" type="date" value="${v('admission_date')}"></div><div class="field"><label for="levelOfCare">Level-of-care status</label><select id="levelOfCare" name="levelOfCareStatus">${optionList(careStatusLabels, livingArrangement?.level_of_care_status || 'not_requested')}</select></div><div class="field"><label for="fl2Status">FL-2 status</label><select id="fl2Status" name="fl2Status">${optionList(fl2StatusLabels, livingArrangement?.fl2_status || 'not_applicable')}</select></div></div></fieldset>
+        <fieldset><legend>Home and spouse details</legend><div class="field"><label for="spouseName">Fictional spouse at home</label><input id="spouseName" name="spouseName" maxlength="160" value="${v('spouse_name')}"></div><label class="check-row"><input type="checkbox" name="spouseAtHome" ${livingArrangement?.spouse_at_home ? 'checked' : ''}><span>A spouse remains at home</span></label><label class="check-row"><input type="checkbox" name="intendsToReturnHome" ${livingArrangement?.intends_to_return_home ? 'checked' : ''}><span>Applicant intends to return home</span></label></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><span></span><button class="button primary" type="submit">Save living arrangement</button></div>
+      </form>
+      <div class="next-step-bar"><div><strong>Next: Insurance &amp; Authorized Representative</strong><p>Record fictional coverage and representative choices.</p></div><button class="button primary" type="button" data-open-test-step="coverage" data-application-id="${escapeHtml(application.id)}">Continue</button></div>
+    </section>`;
+}
+
+async function renderCoverageRepresentative(applicationId, notice = '', editCoverageId = '') {
+  elements.headerViewName.textContent = 'Insurance & Authorized Representative';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, applicant, healthCoverage = [], authorizedRepresentative } = details;
+  const editing = healthCoverage.find(coverage => coverage.id === editCoverageId) || null;
+  const primaryName = `${applicant?.legal_first_name || 'Primary'} ${applicant?.legal_last_name || 'applicant'}`.trim();
+  const r = (key, fallback = '') => escapeHtml(authorizedRepresentative?.[key] ?? fallback);
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Insurance &amp; Authorized Representative</h1><p>${escapeHtml(programTitle(application.program_id))} · NCDHHS Appendix A and Appendix C information</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Use fictional coverage and contacts only.</strong><p>Do not enter real policy numbers, Medicare identifiers, employer plans, phone numbers, email addresses, guardians, or legal representatives.</p></div></div>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 5</span><strong>Health coverage</strong></div>
+      ${healthCoverage.length ? `<div class="record-list">${healthCoverage.map(coverage => `<article><div><strong>${escapeHtml(coverageTypeLabels[coverage.coverage_type] || coverage.coverage_type)}</strong><span>${coverage.coverage_type === 'none' ? 'No current coverage reported' : `${escapeHtml(coverage.covered_person || primaryName)}${coverage.insurer_name ? ` · ${escapeHtml(coverage.insurer_name)}` : ''}`}</span></div><div><button type="button" data-edit-health-coverage="${escapeHtml(coverage.id)}" data-application-id="${escapeHtml(application.id)}">Edit</button><button type="button" data-delete-health-coverage="${escapeHtml(coverage.id)}" data-application-id="${escapeHtml(application.id)}">Remove</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No fictional health coverage selection has been recorded.</p>'}
+      <form id="healthCoverageForm" data-application-id="${escapeHtml(application.id)}" data-coverage-id="${escapeHtml(editing?.id || '')}">
+        <fieldset><legend>${editing ? 'Edit' : 'Add'} fictional coverage</legend><div class="two-fields"><div class="field"><label for="coverageType">Coverage type</label><select id="coverageType" name="coverageType">${optionList(coverageTypeLabels, editing?.coverage_type || 'none')}</select></div><div class="field"><label for="coveredPerson">Covered person</label><input id="coveredPerson" name="coveredPerson" maxlength="160" value="${escapeHtml(editing?.covered_person || primaryName)}"></div></div><div class="two-fields"><div class="field"><label for="insurerName">Insurer or plan name</label><input id="insurerName" name="insurerName" maxlength="180" value="${escapeHtml(editing?.insurer_name || '')}"></div><div class="field"><label for="policyholderName">Policyholder name</label><input id="policyholderName" name="policyholderName" maxlength="160" value="${escapeHtml(editing?.policyholder_name || '')}"></div></div><div class="two-fields"><div class="field"><label for="coverageStart">Coverage start date</label><input id="coverageStart" name="coverageStartDate" type="date" value="${escapeHtml(editing?.coverage_start_date || '')}"></div><div class="field"><label for="coverageEnd">Coverage end date</label><input id="coverageEnd" name="coverageEndDate" type="date" value="${escapeHtml(editing?.coverage_end_date || '')}"></div></div><label class="check-row"><input type="checkbox" name="employmentCoverageAvailable" ${editing?.employment_coverage_available ? 'checked' : ''}><span>Job-based coverage is available to someone in the household</span></label></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="resources" data-application-id="${escapeHtml(application.id)}">Back to resources</button><div>${editing ? `<button class="button secondary" type="button" data-open-test-step="coverage" data-application-id="${escapeHtml(application.id)}">Cancel edit</button>` : ''}<button class="button primary" type="submit">${editing ? 'Update' : 'Add'} coverage</button></div></div>
+      </form>
+    </section>
+    <section class="intake-form-panel">
+      <div class="intake-progress"><span>Step 5</span><strong>Authorized representative choice</strong></div>
+      <form id="authorizedRepresentativeForm" data-application-id="${escapeHtml(application.id)}">
+        <fieldset><legend>Representative selection</legend><div class="two-fields"><div class="field"><label for="wantsRepresentative">Choose a representative?</label><select id="wantsRepresentative" name="wantsRepresentative"><option value="false" ${authorizedRepresentative?.wants_representative !== true ? 'selected' : ''}>No</option><option value="true" ${authorizedRepresentative?.wants_representative === true ? 'selected' : ''}>Yes</option></select></div><div class="field"><label for="representativeType">Representative type</label><select id="representativeType" name="representativeType">${optionList(representativeTypeLabels, authorizedRepresentative?.representative_type === 'organization' ? 'organization' : 'person')}</select></div></div><div class="three-fields"><div class="field"><label for="representativeName">Representative name</label><input id="representativeName" name="representativeName" maxlength="160" value="${r('representative_name')}"></div><div class="field"><label for="representativeOrganization">Organization</label><input id="representativeOrganization" name="organizationName" maxlength="180" value="${r('organization_name')}"></div><div class="field"><label for="representativeRelationship">Relationship</label><input id="representativeRelationship" name="relationship" maxlength="100" value="${r('relationship')}"></div></div><div class="three-fields"><div class="field"><label for="representativePhone">Phone</label><input id="representativePhone" name="phone" maxlength="30" value="${r('phone')}"></div><div class="field"><label for="representativeEmail">Email</label><input id="representativeEmail" name="email" type="email" maxlength="254" value="${r('email')}"></div><div class="field"><label for="authorityScope">Authority scope</label><select id="authorityScope" name="authorityScope">${optionList(authorityScopeLabels, authorizedRepresentative?.authority_scope || 'application_only')}</select></div></div><label class="check-row"><input type="checkbox" name="designationAcknowledged" ${authorizedRepresentative?.designation_acknowledged ? 'checked' : ''}><span>Fictional designation authority has been acknowledged</span></label></fieldset>
+        ${fictionalConfirmation()}
+        <div class="intake-form-actions"><span></span><button class="button primary" type="submit">Save representative choice</button></div>
+      </form>
+      <div class="next-step-bar"><div><strong>Next: Review &amp; Submit</strong><p>Check required sections and submit the fictional case to the administrator queue.</p></div><button class="button primary" type="button" data-open-test-step="review" data-application-id="${escapeHtml(application.id)}">Review application</button></div>
+    </section>`;
+}
+
+async function renderApplicationReview(applicationId, notice = '') {
+  elements.headerViewName.textContent = 'Review & Submit';
+  const details = await loadTestApplicationDetails(applicationId);
+  const { application, applicant, householdMembers = [], incomeSources = [], resources = [], healthCoverage = [], livingArrangement, authorizedRepresentative, completion } = details;
+  const checks = [
+    ['Applicant information', completion.applicant, 'applicant'], ['Residency', completion.residency, 'household'], ['Income or no-income selection', completion.income, 'income'],
+    [`Resources${completion.resourcesRequired ? '' : ' (not required for this pathway)'}`, completion.resources, 'resources'], ['Living arrangement', completion.livingArrangement, 'resources'],
+    ['Health coverage or no-coverage selection', completion.healthCoverage, 'coverage'], ['Authorized representative choice', completion.authorizedRepresentative, 'coverage']
+  ];
+  const administrator = currentProfile?.account_type === 'administrator';
+  const editableOwner = application.owner_id === currentUser?.id && application.status === 'draft';
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Review &amp; Submit</h1><p>${escapeHtml(programTitle(application.program_id))} · Status: ${escapeHtml(application.status.replaceAll('_', ' '))}</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>This does not submit anything to NC Medicaid or a county DSS.</strong><p>It places a completely fictional staging record into the MMS administrator test queue only.</p></div></div>
+    <section class="review-grid">
+      <article><span>Applicant</span><strong>${escapeHtml(applicant ? `${applicant.legal_first_name} ${applicant.legal_last_name}` : 'Not entered')}</strong><small>${householdMembers.length} additional household member(s)</small></article>
+      <article><span>Income</span><strong>${incomeSources.length} source(s)</strong><small>No eligibility calculation performed</small></article>
+      <article><span>Resources</span><strong>${resources.length} selection(s)</strong><small>${completion.resourcesRequired ? 'Required pathway' : 'Optional pathway'}</small></article>
+      <article><span>Living setting</span><strong>${escapeHtml(livingArrangement ? livingSettingLabels[livingArrangement.setting] || livingArrangement.setting : 'Not entered')}</strong><small>FL-2: ${escapeHtml(livingArrangement ? fl2StatusLabels[livingArrangement.fl2_status] : 'Not entered')}</small></article>
+      <article><span>Coverage</span><strong>${healthCoverage.length} selection(s)</strong><small>Appendix A information</small></article>
+      <article><span>Representative</span><strong>${authorizedRepresentative ? (authorizedRepresentative.wants_representative ? 'Representative selected' : 'No representative') : 'Not entered'}</strong><small>Appendix C information</small></article>
+    </section>
+    <section class="intake-form-panel"><div class="intake-progress"><span>Step 6</span><strong>Required-section check</strong></div><div class="completion-list">${checks.map(([label, complete, step]) => `<button type="button" class="${complete ? 'complete' : 'incomplete'}" data-open-test-step="${step}" data-application-id="${escapeHtml(application.id)}"><span>${complete ? '✓' : '!'}</span><strong>${escapeHtml(label)}</strong><small>${complete ? 'Complete' : 'Needs information'}</small></button>`).join('')}</div>
+      ${editableOwner ? `<label class="test-confirmation"><input id="submitFictionalConfirmation" type="checkbox"><span>I confirm the entire application is fictional and authorize submission to the MMS staging review queue.</span></label><div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="coverage" data-application-id="${escapeHtml(application.id)}">Back to coverage</button><button class="button primary" type="button" data-submit-test-application="${escapeHtml(application.id)}" ${completion.ready ? '' : 'disabled'}>Submit fictional application</button></div>` : `<div class="policy-notice">This fictional application is read-only because its status is ${escapeHtml(application.status.replaceAll('_', ' '))}.</div>`}
+    </section>
+    ${administrator && application.status !== 'draft' ? `<section class="admin-panel"><h2>Administrator review</h2><form id="reviewStatusForm" data-application-id="${escapeHtml(application.id)}"><div class="two-fields"><div class="field"><label for="reviewStatus">Review status</label><select id="reviewStatus" name="status">${optionList({ under_review: 'Under review', information_requested: 'Information requested', approved: 'Approved test', denied: 'Denied test', closed: 'Closed' }, application.status === 'submitted' ? 'under_review' : application.status)}</select></div><div class="field"><label>Safety boundary</label><p class="field-help">Status changes apply only to this fictional staging record.</p></div></div><button class="button primary" type="submit">Update review status</button></form></section>` : ''}`;
+}
+
+async function renderApplicationQueue(notice = '') {
+  elements.headerViewName.textContent = 'Pending Applications';
+  const { applications = [] } = await adminRequest('/api/intake/test-applications');
+  const queue = currentProfile?.account_type === 'administrator' ? applications.filter(item => item.status !== 'draft') : applications.filter(item => item.status !== 'draft');
+  elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">MMS staging review</p><h1>Application Queue</h1><p>Review fictional submissions without exposing the queue to public or organization accounts.</p></section>${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}<div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional test records only.</strong><p>No item in this queue is an official Medicaid application or eligibility decision.</p></div></div><section class="admin-panel"><h2>Submitted test applications</h2>${queue.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Applicant</th><th>Pathway</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead><tbody>${queue.map(item => `<tr><td>${escapeHtml(item.applicant_name)}</td><td>${escapeHtml(programTitle(item.program_id))}</td><td><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></td><td>${escapeHtml(formatAccountDate(item.updated_at))}</td><td class="admin-actions"><button type="button" data-review-test-application="${escapeHtml(item.id)}">Open review</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="admin-empty">No fictional applications have been submitted for review.</p>'}</section>`;
 }
 
 async function saveResidency(form) {
@@ -608,6 +728,45 @@ async function saveIncomeSource(form) {
   await renderIncomeEmployment(applicationId, `Fictional income source ${form.dataset.sourceId ? 'updated' : 'added'}.`);
 }
 
+async function saveResource(form) {
+  const values = new FormData(form); const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_resource', applicationId, resourceId: form.dataset.resourceId || '', resourceType: values.get('resourceType'), ownerLabel: values.get('ownerLabel'),
+    description: values.get('description'), currentValue: values.get('currentValue'), jointlyOwned: values.get('jointlyOwned') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderResourcesLiving(applicationId, `Fictional resource ${form.dataset.resourceId ? 'updated' : 'added'}.`);
+}
+
+async function saveLivingArrangement(form) {
+  const values = new FormData(form); const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_living_arrangement', applicationId, setting: values.get('setting'), facilityName: values.get('facilityName'), facilityCounty: values.get('facilityCounty'), admissionDate: values.get('admissionDate'),
+    spouseAtHome: values.get('spouseAtHome') === 'on', spouseName: values.get('spouseName'), intendsToReturnHome: values.get('intendsToReturnHome') === 'on',
+    levelOfCareStatus: values.get('levelOfCareStatus'), fl2Status: values.get('fl2Status'), fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderResourcesLiving(applicationId, 'Fictional living arrangement saved.');
+}
+
+async function saveHealthCoverage(form) {
+  const values = new FormData(form); const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_health_coverage', applicationId, coverageId: form.dataset.coverageId || '', coverageType: values.get('coverageType'), coveredPerson: values.get('coveredPerson'),
+    insurerName: values.get('insurerName'), policyholderName: values.get('policyholderName'), employmentCoverageAvailable: values.get('employmentCoverageAvailable') === 'on',
+    coverageStartDate: values.get('coverageStartDate'), coverageEndDate: values.get('coverageEndDate'), fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderCoverageRepresentative(applicationId, `Fictional coverage ${form.dataset.coverageId ? 'updated' : 'added'}.`);
+}
+
+async function saveAuthorizedRepresentative(form) {
+  const values = new FormData(form); const applicationId = form.dataset.applicationId;
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: {
+    action: 'save_authorized_representative', applicationId, wantsRepresentative: values.get('wantsRepresentative') === 'true', representativeType: values.get('representativeType'),
+    representativeName: values.get('representativeName'), organizationName: values.get('organizationName'), relationship: values.get('relationship'), phone: values.get('phone'), email: values.get('email'),
+    authorityScope: values.get('authorityScope'), designationAcknowledged: values.get('designationAcknowledged') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+  } });
+  await renderCoverageRepresentative(applicationId, 'Fictional authorized representative choice saved.');
+}
+
 function renderPlaceholder(view) {
   const item = dashboardViews[view];
   elements.headerViewName.textContent = item.title;
@@ -622,6 +781,7 @@ function openDashboardView(view) {
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
   else if (view === 'applications') void renderApplications();
+  else if (view === 'pending_applications' && isPrivilegedRole(currentProfile?.account_type)) void renderApplicationQueue();
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);
@@ -685,6 +845,8 @@ function wireInterface() {
     }
     const resumeTestButton = event.target.closest('[data-resume-test-application]');
     if (resumeTestButton) return void renderApplicantInformation(resumeTestButton.dataset.resumeTestApplication).catch(error => window.alert(error.message));
+    const reviewTestButton = event.target.closest('[data-review-test-application]');
+    if (reviewTestButton) return void renderApplicationReview(reviewTestButton.dataset.reviewTestApplication).catch(error => window.alert(error.message));
     if (event.target.closest('[data-back-intake-programs]')) return void renderApplications();
     const stepButton = event.target.closest('[data-open-test-step]');
     if (stepButton) {
@@ -693,6 +855,9 @@ function wireInterface() {
       if (step === 'applicant') return void renderApplicantInformation(applicationId).catch(error => window.alert(error.message));
       if (step === 'household') return void renderHouseholdResidency(applicationId).catch(error => window.alert(error.message));
       if (step === 'income') return void renderIncomeEmployment(applicationId).catch(error => window.alert(error.message));
+      if (step === 'resources') return void renderResourcesLiving(applicationId).catch(error => window.alert(error.message));
+      if (step === 'coverage') return void renderCoverageRepresentative(applicationId).catch(error => window.alert(error.message));
+      if (step === 'review') return void renderApplicationReview(applicationId).catch(error => window.alert(error.message));
     }
     const editMemberButton = event.target.closest('[data-edit-household-member]');
     if (editMemberButton) return void renderHouseholdResidency(editMemberButton.dataset.applicationId, '', editMemberButton.dataset.editHouseholdMember).catch(error => window.alert(error.message));
@@ -713,6 +878,36 @@ function wireInterface() {
       return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_income_source', applicationId: deleteIncomeButton.dataset.applicationId, sourceId: deleteIncomeButton.dataset.deleteIncomeSource, fictionalConfirmation: true } })
         .then(() => renderIncomeEmployment(deleteIncomeButton.dataset.applicationId, 'Fictional income source removed.'))
         .catch(error => { deleteIncomeButton.disabled = false; window.alert(error.message); });
+    }
+    const editResourceButton = event.target.closest('[data-edit-resource]');
+    if (editResourceButton) return void renderResourcesLiving(editResourceButton.dataset.applicationId, '', editResourceButton.dataset.editResource).catch(error => window.alert(error.message));
+    const deleteResourceButton = event.target.closest('[data-delete-resource]');
+    if (deleteResourceButton) {
+      if (!window.confirm('Remove this fictional resource?')) return;
+      deleteResourceButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_resource', applicationId: deleteResourceButton.dataset.applicationId, resourceId: deleteResourceButton.dataset.deleteResource, fictionalConfirmation: true } })
+        .then(() => renderResourcesLiving(deleteResourceButton.dataset.applicationId, 'Fictional resource removed.'))
+        .catch(error => { deleteResourceButton.disabled = false; window.alert(error.message); });
+    }
+    const editCoverageButton = event.target.closest('[data-edit-health-coverage]');
+    if (editCoverageButton) return void renderCoverageRepresentative(editCoverageButton.dataset.applicationId, '', editCoverageButton.dataset.editHealthCoverage).catch(error => window.alert(error.message));
+    const deleteCoverageButton = event.target.closest('[data-delete-health-coverage]');
+    if (deleteCoverageButton) {
+      if (!window.confirm('Remove this fictional coverage?')) return;
+      deleteCoverageButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'delete_health_coverage', applicationId: deleteCoverageButton.dataset.applicationId, coverageId: deleteCoverageButton.dataset.deleteHealthCoverage, fictionalConfirmation: true } })
+        .then(() => renderCoverageRepresentative(deleteCoverageButton.dataset.applicationId, 'Fictional coverage removed.'))
+        .catch(error => { deleteCoverageButton.disabled = false; window.alert(error.message); });
+    }
+    const submitApplicationButton = event.target.closest('[data-submit-test-application]');
+    if (submitApplicationButton) {
+      const confirmation = document.getElementById('submitFictionalConfirmation');
+      if (!confirmation?.checked) return void window.alert('Confirm that the entire application is fictional before submitting.');
+      if (!window.confirm('Submit this fictional application to the MMS staging administrator queue?')) return;
+      submitApplicationButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'submit', applicationId: submitApplicationButton.dataset.submitTestApplication, fictionalConfirmation: true } })
+        .then(() => renderApplicationReview(submitApplicationButton.dataset.submitTestApplication, 'Fictional application submitted to the staging review queue.'))
+        .catch(error => { submitApplicationButton.disabled = false; window.alert(error.message); });
     }
     const adminButton = event.target.closest('[data-admin-action]');
     if (!adminButton) return;
@@ -753,6 +948,28 @@ function wireInterface() {
       if (!form.reportValidity()) return;
       setBusy(form, true);
       return void saveIncomeSource(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'resourceForm') {
+      event.preventDefault(); const form = event.target; if (!form.reportValidity()) return; setBusy(form, true);
+      return void saveResource(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'livingArrangementForm') {
+      event.preventDefault(); const form = event.target; if (!form.reportValidity()) return; setBusy(form, true);
+      return void saveLivingArrangement(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'healthCoverageForm') {
+      event.preventDefault(); const form = event.target; if (!form.reportValidity()) return; setBusy(form, true);
+      return void saveHealthCoverage(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'authorizedRepresentativeForm') {
+      event.preventDefault(); const form = event.target; if (!form.reportValidity()) return; setBusy(form, true);
+      return void saveAuthorizedRepresentative(form).catch(error => { setBusy(form, false); window.alert(error.message); });
+    }
+    if (event.target.id === 'reviewStatusForm') {
+      event.preventDefault(); const form = event.target; if (!form.reportValidity()) return; const values = new FormData(form); setBusy(form, true);
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'review_status', applicationId: form.dataset.applicationId, status: values.get('status') } })
+        .then(() => renderApplicationReview(form.dataset.applicationId, 'Fictional review status updated.'))
+        .catch(error => { setBusy(form, false); window.alert(error.message); });
     }
     if (event.target.id !== 'inviteStaffForm') return;
     event.preventDefault();

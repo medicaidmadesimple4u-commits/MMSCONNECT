@@ -14,6 +14,8 @@ The first protected-intake build is a staging-only security test. It is not appr
 - Applicant saves and application creation create audit records without copying applicant details into the audit log.
 - Residency, household-member, and income-source changes create audit events without copying addresses, names, or financial amounts into the audit log.
 - Household, residency, and income tables are server-only; browser database roles receive no direct table privileges.
+- Resource, living-arrangement, health-coverage, and authorized-representative tables are also server-only and audited without copying entered values into the audit log.
+- Submission creates a fictional staging queue item only. Administrator review status changes are role-checked by the server and never submit data to NCDHHS or a county DSS.
 - The interface requires confirmation that all entered information is fictional.
 
 ## Not enabled

@@ -62,8 +62,8 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   assert.match(script, /fictionalConfirmation/);
   assert.match(script, /isPrivilegedRole\(currentProfile\?\.account_type\)/);
   assert.match(script, /\/api\/intake\/test-applications/);
-  for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm']) assert.match(script, new RegExp(formId));
-  for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source']) assert.match(script, new RegExp(action));
+  for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm', 'resourceForm', 'livingArrangementForm', 'healthCoverageForm', 'authorizedRepresentativeForm', 'reviewStatusForm']) assert.match(script, new RegExp(formId));
+  for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status']) assert.match(script, new RegExp(action));
   assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
@@ -92,6 +92,24 @@ test('household and income schema remains server-only and audited', async () => 
     assert.doesNotMatch(sql, new RegExp(`grant[^;]+on public\\.${table} to authenticated`, 'i'));
   }
   for (const action of ['residency_saved', 'household_member_saved', 'household_member_removed', 'income_source_saved', 'income_source_removed']) assert.match(sql, new RegExp(action));
+});
+
+test('completed intake sections and review workflow remain server-only and audited', async () => {
+  const [sql, script, api] = await Promise.all([
+    read('supabase/migrations/20260716213000_complete_test_intake.sql'), read('auth.js'), read('api/intake/test-applications.js')
+  ]);
+  for (const table of ['application_resources', 'application_living_arrangements', 'application_health_coverage', 'application_authorized_representatives']) {
+    assert.match(sql, new RegExp(`create table if not exists public\\.${table}`, 'i'));
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+    assert.match(sql, new RegExp(`revoke all on public\\.${table} from anon, authenticated`, 'i'));
+    assert.doesNotMatch(sql, new RegExp(`grant[^;]+on public\\.${table} to authenticated`, 'i'));
+    assert.match(api, new RegExp(table));
+  }
+  for (const action of ['resource_saved', 'resource_removed', 'living_arrangement_saved', 'health_coverage_saved', 'health_coverage_removed', 'authorized_representative_saved', 'application_submitted', 'review_status_changed']) assert.match(sql, new RegExp(action));
+  assert.match(api, /staff\.profile\.account_type !== 'administrator'/);
+  assert.match(api, /details\.completion\.ready/);
+  assert.match(script, /renderApplicationQueue/);
+  assert.match(script, /This does not submit anything to NC Medicaid or a county DSS/);
 });
 
 test('database schema enables RLS and prevents privileged self-registration', async () => {
@@ -126,6 +144,10 @@ test('administrator and intake APIs verify roles and keep privileged credentials
   assert.match(intake, /application_residency/);
   assert.match(intake, /application_household_members/);
   assert.match(intake, /application_income_sources/);
+  assert.match(intake, /application_resources/);
+  assert.match(intake, /application_living_arrangements/);
+  assert.match(intake, /application_health_coverage/);
+  assert.match(intake, /application_authorized_representatives/);
   const browserScript = await read('auth.js');
   assert.doesNotMatch(browserScript, /SUPABASE_SERVICE_ROLE_KEY|service[_-]?role/i);
 });

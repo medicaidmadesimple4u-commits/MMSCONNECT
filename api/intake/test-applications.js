@@ -16,6 +16,10 @@ const reviewStatuses = new Set(['under_review', 'information_requested', 'approv
 const referralNeedServices = new Set(['living_legacy', 'long_term_care', 'home_care', 'adult_day', 'hospice_palliative', 'benefits_documents', 'community_resource', 'housing', 'food_nutrition', 'transportation', 'utilities', 'legal_aid', 'behavioral_health', 'caregiver_respite', 'other']);
 const referralUrgencies = new Set(['routine', 'priority', 'time_sensitive']);
 const contactMethods = new Set(['portal', 'phone', 'text', 'email']);
+const applicationDetailTables = [
+  'application_authorized_representatives', 'application_health_coverage', 'application_resources', 'application_living_arrangements',
+  'application_referral_needs', 'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
+];
 
 function text(value, maximum) { return String(value || '').trim().slice(0, maximum); }
 function optionalText(value, maximum) { return text(value, maximum) || null; }
@@ -75,6 +79,14 @@ async function auditStatus(applicationId, actorId, action) {
   await serviceRequest('/rest/v1/application_audit_log', { method: 'POST', prefer: 'return=minimal', body: { application_id: applicationId, actor_id: actorId, action, entity_id: applicationId } });
 }
 
+async function clearApplicationDetails(applicationId) {
+  const id = encodeURIComponent(applicationId);
+  await serviceRequest(`/rest/v1/referrals?source_application_id=eq.${id}`, { method: 'DELETE' });
+  for (const table of applicationDetailTables) {
+    await serviceRequest(`/rest/v1/${table}?application_id=eq.${id}`, { method: 'DELETE' });
+  }
+}
+
 export default async function handler(request, response) {
   if (!requireMethod(request, response, ['GET', 'POST'])) return;
   const targetEnvironment = process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || 'development';
@@ -112,16 +124,10 @@ export default async function handler(request, response) {
     if (action === 'reset' || action === 'delete_application') {
       const application = await accessibleApplication(staff, applicationId);
       if (!application || !confirmedFictional(body)) return sendJson(response, 400, { error: 'Select an accessible fictional test application and confirm the action.' });
-      await serviceRequest(`/rest/v1/referrals?source_application_id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
+      await clearApplicationDetails(application.id);
       if (action === 'delete_application') {
         await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
         return sendJson(response, 200, { deleted: true });
-      }
-      for (const table of [
-        'application_authorized_representatives', 'application_health_coverage', 'application_resources', 'application_living_arrangements',
-        'application_referral_needs', 'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
-      ]) {
-        await serviceRequest(`/rest/v1/${table}?application_id=eq.${encodeURIComponent(application.id)}`, { method: 'DELETE' });
       }
       const updated = await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=representation', body: { status: 'draft' } });
       await auditStatus(application.id, staff.user.id, 'application_reset');
@@ -152,6 +158,42 @@ export default async function handler(request, response) {
     if (!application) return sendJson(response, 404, { error: 'The fictional test application was not found or is not accessible to this account.' });
     if (application.status !== 'draft') return sendJson(response, 409, { error: 'This fictional application is read-only after submission. Reset it to a blank draft before entering new test information.' });
     if (!confirmedFictional(body)) return sendJson(response, 400, { error: 'Confirm that every value is fictional test information.' });
+
+    if (action === 'load_complete_demo') {
+      await clearApplicationDetails(application.id);
+      await serviceRequest('/rest/v1/application_applicants', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, person_order: 1, legal_first_name: 'Fiona', legal_middle_name: 'Fiddledeedee', legal_last_name: 'Quirk', preferred_name: 'Captain Cardigan',
+        date_of_birth: '1947-04-01', contact_email: 'fiona.quirk@example.com', phone: '919-555-0147', preferred_language: 'English', nc_county: 'Wake', applying_for_coverage: true, created_by: staff.user.id
+      } });
+      await serviceRequest('/rest/v1/application_residency', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, lives_in_nc: true, physical_address_line_1: '404 Pajama Lane', physical_address_line_2: 'Apartment ZZZ', physical_city: 'Raleigh', physical_state: 'NC', physical_postal_code: '27601', nc_county: 'Wake', mailing_same: true, temporarily_absent: false
+      } });
+      const household = await serviceRequest('/rest/v1/application_household_members', { method: 'POST', prefer: 'return=representation', body: {
+        application_id: application.id, first_name: 'Barnaby', last_name: 'Quirk', date_of_birth: '1945-09-12', relationship_to_applicant: 'spouse', lives_with_applicant: false, applying_for_coverage: false, tax_relationship: 'joint_filer', pregnant: false
+      } });
+      await serviceRequest('/rest/v1/application_income_sources', { method: 'POST', prefer: 'return=minimal', body: [
+        { application_id: application.id, household_member_id: null, source_type: 'social_security', source_name: 'Social Security retirement (fictional)', gross_amount: 1842, frequency: 'monthly', hours_per_week: null, expected_to_change: false },
+        { application_id: application.id, household_member_id: household?.[0]?.id || null, source_type: 'pension_retirement', source_name: 'Department of Sensible Napping pension', gross_amount: 625, frequency: 'monthly', hours_per_week: null, expected_to_change: false }
+      ] });
+      await serviceRequest('/rest/v1/application_resources', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, resource_type: 'savings', owner_label: 'Fiona and Barnaby Quirk', description: 'Emergency cookie and cardigan fund', current_value: 4242, jointly_owned: true
+      } });
+      await serviceRequest('/rest/v1/application_living_arrangements', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, setting: 'assisted_living', facility_name: 'The Royal Flamingo Retirement Castle', facility_county: 'Wake', admission_date: '2026-04-01', spouse_at_home: true, spouse_name: 'Barnaby Quirk', intends_to_return_home: true, level_of_care_status: 'pending', fl2_status: 'pending'
+      } });
+      await serviceRequest('/rest/v1/application_health_coverage', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, coverage_type: 'medicare_a', covered_person: 'Fiona Quirk', insurer_name: 'North Star Medicare Plan (fictional)', policyholder_name: 'Fiona Quirk', employment_coverage_available: false, coverage_start_date: '2012-04-01', coverage_end_date: null
+      } });
+      await serviceRequest('/rest/v1/application_authorized_representatives', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, wants_representative: true, representative_type: 'organization', representative_name: 'Penelope Paperclip', organization_name: 'Paperwork Wizards Legal & Legacy Center', relationship: 'Professional paperwork wizard', phone: '919-555-0199', email: 'penelope.paperclip@example.com', authority_scope: 'full_case', designation_acknowledged: true
+      } });
+      await serviceRequest('/rest/v1/application_referral_needs', { method: 'POST', prefer: 'return=minimal', body: {
+        application_id: application.id, help_needed: true, requested_services: ['living_legacy', 'transportation', 'caregiver_respite'], urgency: 'priority', preferred_contact_method: 'portal',
+        notes: 'Needs estate-planning guidance, a ride that does not involve a unicycle, and caregiver respite during the competitive bingo finals. Entirely fictional.', referral_consent: true, created_by: staff.user.id
+      } });
+      await auditStatus(application.id, staff.user.id, 'demo_case_loaded');
+      return sendJson(response, 200, await applicationDetails(application));
+    }
 
     if (action === 'save_applicant') {
       const legalFirstName = text(body.legalFirstName, 80); const legalLastName = text(body.legalLastName, 80); const dateOfBirth = String(body.dateOfBirth || '');

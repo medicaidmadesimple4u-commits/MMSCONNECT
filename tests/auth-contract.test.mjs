@@ -150,6 +150,21 @@ test('fictional cases can be reset or deleted through the protected server endpo
   assert.match(resetSql, /application_reset/);
 });
 
+test('a complete funny fictional case can be loaded and submitted end to end', async () => {
+  const [api, script, auditSql] = await Promise.all([
+    read('api/intake/test-applications.js'), read('auth.js'), read('supabase/migrations/20260717033000_add_demo_case_loaded_audit.sql')
+  ]);
+  assert.match(api, /action === 'load_complete_demo'/);
+  for (const table of ['application_applicants', 'application_residency', 'application_household_members', 'application_income_sources', 'application_resources', 'application_living_arrangements', 'application_health_coverage', 'application_authorized_representatives', 'application_referral_needs']) assert.match(api, new RegExp(`\/rest\/v1\/${table}`));
+  for (const value of ['Fiona', 'Quirk', 'The Royal Flamingo Retirement Castle', 'Paperwork Wizards Legal & Legacy Center']) assert.match(api, new RegExp(value.replace(/[&]/g, '\\&')));
+  assert.match(api, /requested_services: \['living_legacy', 'transportation', 'caregiver_respite'\]/);
+  assert.match(api, /demo_case_loaded/);
+  assert.match(script, /data-start-complete-demo/);
+  assert.match(script, /data-load-complete-demo/);
+  assert.match(script, /Create complete funny demo/);
+  assert.match(auditSql, /demo_case_loaded/);
+});
+
 test('database schema enables RLS and prevents privileged self-registration', async () => {
   const sql = await read('supabase/schema.sql');
   assert.match(sql, /enable row level security/i);

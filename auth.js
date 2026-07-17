@@ -447,7 +447,7 @@ async function renderApplications(selectedProgramId = '', notice = '') {
         <ol class="intake-section-list">
           ${checklist.map((section, index) => `<li><span>${index + 1}</span><div><h3>${escapeHtml(section.title)}</h3><p>${escapeHtml(section.summary)}</p><small>${policyReferenceLinks(section.policy)}</small></div></li>`).join('')}
         </ol>
-        ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the protected workflow</strong><p>Create a staging-only draft and use fictional information to test save and resume.</p></div><button class="button primary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start fictional test</button></div>` : ''}
+        ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the protected workflow</strong><p>Start a blank draft for manual testing or load a complete funny scenario that is ready for review and submission.</p></div><div class="official-actions"><button class="button secondary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start blank test</button><button class="button primary" type="button" data-start-complete-demo="${escapeHtml(selected.id)}">Create complete funny demo</button></div></div>` : ''}
         ${guideOnly ? `<div class="intake-test-action"><div><strong>Ready to apply?</strong><p>Continue through an official North Carolina application channel. MMS Connect does not transmit an application to the State.</p></div><div class="official-actions"><a class="button primary" href="https://epass.nc.gov/" target="_blank" rel="noopener noreferrer">Apply through ePASS</a><a class="button secondary" href="https://www.ncdhhs.gov/divisions/social-services/local-dss-directory" target="_blank" rel="noopener noreferrer">Find county DSS</a></div></div>` : ''}
         <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><h3>Official NC Medicaid and DSS forms</h3><div class="official-form-grid">${dssForms.map(form => `<a href="${escapeHtml(form.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(form.title)}</strong><span>Open official form ↗</span></a>`).join('')}</div><p>Income and resource standards change. MMS Connect links to current official sources instead of treating a displayed amount as an eligibility decision.</p></div>
       </section>` : ''}`;
@@ -462,6 +462,14 @@ async function startTestApplication(programId) {
   await renderApplicantInformation(application.id);
 }
 
+async function startCompleteDemoApplication(programId) {
+  const program = getProgram(programId);
+  if (!program || !isPrivilegedRole(currentProfile?.account_type)) throw new Error('This test pathway is not available.');
+  const { application } = await adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'create', programId: program.id } });
+  await adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'load_complete_demo', applicationId: application.id, fictionalConfirmation: true } });
+  await renderApplicationReview(application.id, 'A complete funny fictional case was loaded. Review every section, then confirm and submit it.');
+}
+
 async function renderApplicantInformation(applicationId, notice = '') {
   elements.headerViewName.textContent = 'Applicant Information';
   const { application, applicant } = await adminRequest(`/api/intake/test-applications?applicationId=${encodeURIComponent(applicationId)}`);
@@ -472,6 +480,7 @@ async function renderApplicantInformation(applicationId, notice = '') {
     <section class="content-heading"><p class="eyebrow">Fictional staging test</p><h1>Applicant Information</h1><p>${escapeHtml(programTitle(application.program_id))} · Policy ${escapeHtml(application.policy_version)}</p></section>
     ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
     <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Never enter a real person’s information here.</strong><p>This staging workflow is restricted to MMS staff and administrators for fictional testing. Do not use actual names, birth dates, contact details, case information, or documents.</p></div></div>
+    <section class="intake-test-action"><div><strong>Need a presentation-ready case?</strong><p>Replace this draft with the complete Fiona Quirk scenario, including household, income, resources, facility, coverage, representative, and referral needs.</p></div><button class="button secondary" type="button" data-load-complete-demo="${escapeHtml(application.id)}">Load complete funny demo</button></section>
     <section class="intake-form-panel">
       <div class="intake-progress"><span>Step 1 of ${getProgramSections(application.program_id).length}</span><strong>Applicant information</strong></div>
       <form id="applicantInfoForm" data-application-id="${escapeHtml(application.id)}">
@@ -1058,6 +1067,11 @@ function wireInterface() {
     }
     const programButton = event.target.closest('[data-program-id]');
     if (programButton) return void renderApplications(programButton.dataset.programId);
+    const startCompleteDemoButton = event.target.closest('[data-start-complete-demo]');
+    if (startCompleteDemoButton) {
+      startCompleteDemoButton.disabled = true;
+      return void startCompleteDemoApplication(startCompleteDemoButton.dataset.startCompleteDemo).catch(error => { startCompleteDemoButton.disabled = false; window.alert(error.message); });
+    }
     const startTestButton = event.target.closest('[data-start-test-application]');
     if (startTestButton) {
       startTestButton.disabled = true;
@@ -1067,6 +1081,14 @@ function wireInterface() {
     if (resumeTestButton) return void renderApplicantInformation(resumeTestButton.dataset.resumeTestApplication).catch(error => window.alert(error.message));
     const reviewTestButton = event.target.closest('[data-review-test-application]');
     if (reviewTestButton) return void renderApplicationReview(reviewTestButton.dataset.reviewTestApplication).catch(error => window.alert(error.message));
+    const loadCompleteDemoButton = event.target.closest('[data-load-complete-demo]');
+    if (loadCompleteDemoButton) {
+      if (!window.confirm('Replace all information in this draft with the complete Fiona Quirk fictional scenario?')) return;
+      loadCompleteDemoButton.disabled = true;
+      return void adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'load_complete_demo', applicationId: loadCompleteDemoButton.dataset.loadCompleteDemo, fictionalConfirmation: true } })
+        .then(() => renderApplicationReview(loadCompleteDemoButton.dataset.loadCompleteDemo, 'Complete funny fictional case loaded. Review it, confirm it is fictional, and submit.'))
+        .catch(error => { loadCompleteDemoButton.disabled = false; window.alert(error.message); });
+    }
     const resetTestButton = event.target.closest('[data-reset-test-application]');
     if (resetTestButton) {
       if (!window.confirm('Reset this fictional case? All entered test information will be removed and the pathway will return to a blank draft.')) return;

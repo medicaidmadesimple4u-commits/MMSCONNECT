@@ -17,6 +17,7 @@ const referralNeedServices = new Set(['living_legacy', 'long_term_care', 'home_c
 const referralUrgencies = new Set(['routine', 'priority', 'time_sensitive']);
 const contactMethods = new Set(['portal', 'phone', 'text', 'email']);
 const applicationDetailTables = [
+  'demo_case_journeys',
   'application_authorized_representatives', 'application_health_coverage', 'application_resources', 'application_living_arrangements',
   'application_referral_needs', 'application_income_sources', 'application_household_members', 'application_residency', 'application_applicants'
 ];

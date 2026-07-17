@@ -253,6 +253,37 @@ test('staging includes fictional companies and a full referral simulator without
   assert.match(script, /End-to-end test lab/);
 });
 
+test('fictional case journey implements all fourteen approved workflows as persistent staging actions', async () => {
+  const [script, api, sql, workflowModule] = await Promise.all([
+    read('auth.js'), read('api/intake/demo-case-journey.js'), read('supabase/migrations/20260717043000_add_demo_case_journey.sql'),
+    import(new URL('demo-case-workflows.js', root))
+  ]);
+  const { demoCaseWorkflows, totalDemoSteps } = workflowModule;
+  assert.equal(demoCaseWorkflows.length, 14);
+  assert.deepEqual(demoCaseWorkflows.map(item => item.id), Array.from({ length: 14 }, (_, index) => `WF-${String(index + 1).padStart(2, '0')}`));
+  assert.ok(totalDemoSteps() >= 70, 'the journey should retain accountable detail across every workflow');
+  for (const workflow of demoCaseWorkflows) {
+    assert.ok(workflow.title && workflow.artifact && workflow.summary && workflow.statuses && workflow.exception);
+    assert.ok(workflow.steps.length >= 5);
+    for (const item of workflow.steps) assert.ok(item.actor && item.action && item.owner && item.output && item.screen);
+  }
+  for (const action of ['initialize', 'advance_step', 'complete_workflow', 'simulate_exception', 'resolve_exception', 'complete_all', 'reset']) {
+    assert.match(api, new RegExp(`action === '${action}'`));
+  }
+  assert.match(api, /ensureCompletedCommunityReferral/);
+  assert.match(api, /source_application_id/);
+  assert.match(api, /environment=eq\.staging/);
+  assert.match(api, /available only in staging/);
+  assert.match(script, /renderDemoCaseJourney/);
+  assert.match(script, /Open all 14 workflows/);
+  assert.match(script, /data-journey-action/);
+  for (const table of ['demo_case_journeys', 'demo_case_workflow_steps', 'demo_case_artifacts', 'demo_case_journey_events']) {
+    assert.match(sql, new RegExp(`create table if not exists public\\.${table}`, 'i'));
+    assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`, 'i'));
+    assert.match(sql, new RegExp(`revoke all on table public\\.${table} from anon, authenticated`, 'i'));
+  }
+});
+
 test('administrator and intake APIs verify roles and keep privileged credentials server-side', async () => {
   const [library, accounts, invite, update, intake] = await Promise.all([
     read('lib/admin.js'), read('api/admin/accounts.js'), read('api/admin/invite-staff.js'), read('api/admin/update-account.js'), read('api/intake/test-applications.js')

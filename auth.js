@@ -1,4 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/+esm';
+import { demoCaseWorkflows } from './demo-case-workflows.js';
 import { dssForms, getPolicyReferenceUrl, getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
 
 const elements = {
@@ -50,6 +51,11 @@ const dashboardViews = {
     title: 'Pending Applications',
     description: 'Applications requiring staff action will appear here after secure intake is enabled.',
     empty: 'Application review is not enabled in this release.'
+  },
+  case_journey: {
+    title: 'Fictional Case Journey',
+    description: 'Demonstrate the complete case lifecycle across all 14 approved workflows.',
+    empty: 'Submit a complete fictional application to start its case journey.'
   },
   document_review: {
     title: 'Documents Awaiting Review',
@@ -225,6 +231,7 @@ function configureDashboardNavigation() {
         ['applications', 'I', 'Intake Programs'],
         ['active_clients', 'C', 'Active Clients'],
         ['pending_applications', 'A', 'Pending Applications'],
+        ['case_journey', 'J', 'Fictional Case Journey'],
         ['document_review', 'D', 'Document Review'],
         ['referrals', 'R', 'Referral Network'],
         ['messages', 'M', 'Messages'],
@@ -287,6 +294,7 @@ function renderHome() {
       ['applications', 'I', 'Intake Programs', 'Review NCDHHS policy-guided intake pathways.'],
       ['active_clients', 'C', 'Active Clients', 'View authorized client assignments.'],
       ['pending_applications', 'A', 'Pending Applications', 'Review applications requiring action.'],
+      ['case_journey', 'J', 'Fictional Case Journey', 'Demonstrate all 14 workflows from referral through audit and closure.'],
       ['document_review', 'D', 'Documents Awaiting Review', 'Manage the protected document-review queue.'],
       ['referrals', 'R', 'Referral Network', 'Receive, send, and track organization referrals.'],
       ['messages', 'M', 'Messages', 'Open secure staff communications.'],
@@ -299,10 +307,10 @@ function renderHome() {
     ];
     elements.dashboardContent.innerHTML = `
       <section class="welcome">
-        <div><p class="eyebrow">MMS Connect Staff Portal</p><h1>Welcome, ${escapeHtml(firstName)}.</h1><p>You are signed in with ${escapeHtml(roleLabel(currentProfile?.account_type))} access. Protected client-data tools remain disabled until their security review is complete.</p></div>
+        <div><p class="eyebrow">MMS Connect Staff Portal</p><h1>Welcome, ${escapeHtml(firstName)}.</h1><p>You are signed in with ${escapeHtml(roleLabel(currentProfile?.account_type))} access. The staging portal supports complete fictional workflow demonstrations; real client data remains prohibited.</p></div>
         <span class="status-pill">${escapeHtml(roleLabel(currentProfile?.account_type))}</span>
       </section>
-      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Do not enter confidential information yet.</strong><p>This staff portal currently contains interface placeholders only. Client records and document access are not enabled.</p></div></div>
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging data only.</strong><p>Use invented cases such as Fiona Quirk for demonstrations. Do not enter real client, medical, financial, document, or Medicaid information.</p></div></div>
       <section class="dashboard-grid" aria-label="Staff areas">
         ${staffCards.map(([view, icon, title, text]) => `<article class="dashboard-card"><span class="card-icon">${icon}</span><h2>${title}</h2><p>${text}</p><button type="button" data-open-view="${view}">Open ${title}</button></article>`).join('')}
       </section>`;
@@ -730,6 +738,7 @@ async function renderApplicationReview(applicationId, notice = '') {
       ${editableDraft ? `<label class="test-confirmation"><input id="submitFictionalConfirmation" type="checkbox"><span>I confirm the entire application is fictional and authorize submission to the MMS staging review queue.</span></label><div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="support" data-application-id="${escapeHtml(application.id)}">Back to support needs</button><button class="button primary" type="button" data-submit-test-application="${escapeHtml(application.id)}" ${completion.ready ? '' : 'disabled'}>Submit fictional application</button></div>` : `<div class="policy-notice">This fictional application is read-only because its status is ${escapeHtml(application.status.replaceAll('_', ' '))}. Use Reset from the Applications or Pending Applications page to start it again as a blank draft.</div>`}
     </section>
     ${outboundReferralPanel}
+    ${application.status !== 'draft' ? `<section class="intake-test-action case-journey-launch"><div><p class="eyebrow">Presentation workflow</p><strong>Continue through the complete fictional case journey</strong><p>Demonstrate referral intake, onboarding, checklist generation, documents, quality review, DSS follow-up, decisions, placement, community referrals, renewals, messages, administration, audit, and incident response.</p></div><button class="button primary" type="button" data-open-demo-journey="${escapeHtml(application.id)}">Open all 14 workflows</button></section>` : ''}
     ${administrator && application.status !== 'draft' ? `<section class="admin-panel"><h2>Administrator review</h2><form id="reviewStatusForm" data-application-id="${escapeHtml(application.id)}"><div class="two-fields"><div class="field"><label for="reviewStatus">Review status</label><select id="reviewStatus" name="status">${optionList({ under_review: 'Under review', information_requested: 'Information requested', approved: 'Approved test', denied: 'Denied test', closed: 'Closed' }, application.status === 'submitted' ? 'under_review' : application.status)}</select></div><div class="field"><label>Safety boundary</label><p class="field-help">Status changes apply only to this fictional staging record.</p></div></div><button class="button primary" type="submit">Update review status</button></form></section>` : ''}`;
 }
 
@@ -738,6 +747,71 @@ async function renderApplicationQueue(notice = '') {
   const { applications = [] } = await adminRequest('/api/intake/test-applications');
   const queue = currentProfile?.account_type === 'administrator' ? applications.filter(item => item.status !== 'draft') : applications.filter(item => item.status !== 'draft');
   elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">MMS staging review</p><h1>Application Queue</h1><p>Review fictional submissions without exposing the queue to public or organization accounts.</p></section>${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}<div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional test records only.</strong><p>No item in this queue is an official Medicaid application or eligibility decision.</p></div></div><section class="admin-panel"><h2>Submitted test applications</h2>${queue.length ? `<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Applicant</th><th>Pathway</th><th>Status</th><th>Updated</th><th>Actions</th></tr></thead><tbody>${queue.map(item => `<tr><td>${escapeHtml(item.applicant_name)}</td><td>${escapeHtml(programTitle(item.program_id))}</td><td><span class="status-pill">${escapeHtml(item.status.replaceAll('_', ' '))}</span></td><td>${escapeHtml(formatAccountDate(item.updated_at))}</td><td class="admin-actions"><button type="button" data-review-test-application="${escapeHtml(item.id)}">Open review</button><button type="button" data-reset-test-application="${escapeHtml(item.id)}" data-return-view="queue">Reset</button><button type="button" data-delete-test-application="${escapeHtml(item.id)}" data-return-view="queue">Delete</button></td></tr>`).join('')}</tbody></table></div>` : '<p class="admin-empty">No fictional applications have been submitted for review.</p>'}</section>`;
+}
+
+const caseModuleCopy = {
+  case_journey: ['Fictional Case Journey', 'Run the full approved workflow from referral intake through renewal, administration, audit, and closure.'],
+  active_clients: ['Active Fictional Clients', 'Open a submitted fictional case to demonstrate its owners, next actions, artifacts, and complete lifecycle.'],
+  document_review: ['Fictional Document Review', 'Open a case and expand WF-05 to demonstrate requests, secure upload simulation, classification, review, and accepted evidence.'],
+  messages: ['Fictional Messages & Appointments', 'Open a case and expand WF-13 to demonstrate secure messages, delivery states, replies, appointments, and outcomes.'],
+  tasks: ['Fictional Tasks & Deadlines', 'Every incomplete journey step is a visible, owned next action with a due date and persistent status.'],
+  reports: ['Fictional Workflow Reporting', 'Open a case to show step completion, workflow completion, artifacts, exceptions, and attributable history.']
+};
+
+async function renderCaseJourneyList(view = 'case_journey', notice = '') {
+  const [title, description] = caseModuleCopy[view] || caseModuleCopy.case_journey;
+  elements.headerViewName.textContent = title;
+  const { applications = [] } = await adminRequest('/api/intake/test-applications');
+  const submitted = applications.filter(item => item.status !== 'draft');
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Complete synthetic workflow</p><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p></section>
+    ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Presentation-safe fictional records only.</strong><p>Each case journey is staging-only, persistent, attributable, and separated from production data.</p></div></div>
+    <section class="admin-panel"><div class="referral-section-heading"><div><h2>Submitted fictional cases</h2><p>Select a case to open all 14 workflow specifications in one workspace.</p></div><button class="button secondary" type="button" data-open-view="applications">Create another fictional case</button></div>
+      ${submitted.length ? `<div class="test-application-list">${submitted.map(application => `<article><div><strong>${escapeHtml(application.applicant_name)}</strong><span>${escapeHtml(programTitle(application.program_id))} · ${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><div class="test-case-actions"><button class="button primary" type="button" data-open-demo-journey="${escapeHtml(application.id)}">Open complete journey</button><button type="button" data-review-test-application="${escapeHtml(application.id)}">Application review</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No submitted fictional application is available. Create the complete Fiona Quirk demo and submit it first.</p>'}
+    </section>`;
+}
+
+function journeyEventLabel(event) {
+  return ({ journey_initialized: 'Case journey initialized', step_completed: 'Workflow step completed', workflow_completed: 'Workflow completed', exception_opened: 'Exception simulated', exception_resolved: 'Exception resolved', journey_completed: 'Entire journey completed' })[event.event_type] || event.event_type.replaceAll('_', ' ');
+}
+
+async function renderDemoCaseJourney(applicationId, notice = '') {
+  elements.headerViewName.textContent = 'Fictional Case Journey';
+  elements.dashboardContent.innerHTML = '<section class="content-heading"><p class="eyebrow">Fictional case</p><h1>Loading complete journey…</h1></section>';
+  try {
+    const workspace = await adminRequest('/api/intake/demo-case-journey', { method: 'POST', body: { action: 'initialize', applicationId } });
+    const { application, applicant_name: applicantName, journey, steps = [], artifacts = [], events = [], progress } = workspace;
+    const percentage = progress.totalSteps ? Math.round((progress.completedSteps / progress.totalSteps) * 100) : 0;
+    const artifactMap = new Map(artifacts.map(item => [item.workflow_id, item]));
+    elements.dashboardContent.innerHTML = `
+      <button class="back-button" type="button" data-case-journey-list>← Back to fictional cases</button>
+      <section class="content-heading journey-heading"><div><p class="eyebrow">${escapeHtml(application.id.slice(0, 8).toUpperCase())} · Synthetic case</p><h1>${escapeHtml(applicantName)}</h1><p>${escapeHtml(programTitle(application.program_id))} · Application: ${escapeHtml(application.status.replaceAll('_', ' '))}</p></div><span class="referral-status ${journey.status === 'completed' ? 'positive' : journey.status === 'attention' ? 'danger' : 'active'}">${escapeHtml(journey.status)}</span></section>
+      ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
+      ${journey.exception_summary ? `<div class="form-message error"><strong>Fictional exception requiring action:</strong> ${escapeHtml(journey.exception_summary)}</div>` : ''}
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>End-to-end staging simulator.</strong><p>This workspace creates synthetic steps, artifacts, dates, decisions, messages, referrals, incidents, and outcomes. It does not submit anything to DSS or determine Medicaid eligibility.</p></div></div>
+      <section class="journey-summary-grid">
+        <article><span>Workflow progress</span><strong>${progress.completedWorkflows} / ${progress.totalWorkflows}</strong><small>approved workflows completed</small></article>
+        <article><span>Step progress</span><strong>${progress.completedSteps} / ${progress.totalSteps}</strong><small>${percentage}% of accountable actions</small></article>
+        <article><span>Current workflow</span><strong>${escapeHtml(journey.current_workflow_id || 'Complete')}</strong><small>${escapeHtml(journey.next_action || 'All work closed')}</small></article>
+        <article><span>Artifacts</span><strong>${artifacts.filter(item => item.status === 'complete').length} / ${artifacts.length}</strong><small>persistent synthetic outputs</small></article>
+      </section>
+      <section class="journey-control-bar"><div><strong>Demonstration controls</strong><p>Advance one action, complete one workflow, simulate an exception, or prepare the finished presentation state.</p></div><div class="official-actions">${journey.status !== 'completed' ? `<button class="button primary" type="button" data-journey-action="complete_all" data-application-id="${escapeHtml(application.id)}">Complete all remaining workflows</button>` : '<button class="button secondary" type="button" data-open-view="referrals">Open completed referral</button>'}<button class="button secondary" type="button" data-journey-action="reset" data-application-id="${escapeHtml(application.id)}">Reset journey</button></div></section>
+      <section class="journey-workflows" aria-label="Fourteen fictional workflows">
+        ${demoCaseWorkflows.map(workflow => {
+          const workflowSteps = steps.filter(item => item.workflow_id === workflow.id);
+          const completedCount = workflowSteps.filter(item => item.status === 'completed' || item.status === 'skipped').length;
+          const completed = workflowSteps.length > 0 && completedCount === workflowSteps.length;
+          const active = journey.current_workflow_id === workflow.id;
+          const attention = active && journey.status === 'attention';
+          const artifact = artifactMap.get(workflow.id);
+          return `<details class="journey-workflow-card ${completed ? 'complete' : active ? 'active' : 'waiting'}" ${active ? 'open' : ''}><summary><div><span>${escapeHtml(workflow.id)}</span><strong>${escapeHtml(workflow.title)}</strong><small>${completedCount}/${workflowSteps.length} steps · ${escapeHtml(artifact?.status || 'pending')}</small></div><span class="status-pill">${completed ? 'Complete' : active ? (attention ? 'Attention' : 'In progress') : 'Waiting'}</span></summary><div class="journey-workflow-body"><p>${escapeHtml(workflow.summary)}</p><div class="journey-status-path">${escapeHtml(workflow.statuses)}</div><ol class="journey-step-list">${workflowSteps.map(item => `<li class="${escapeHtml(item.status)}"><span>${item.status === 'completed' ? '✓' : item.status === 'blocked' ? '!' : item.step_order}</span><div><strong>${escapeHtml(item.action_label)}</strong><small>${escapeHtml(item.actor_label)} → ${escapeHtml(item.next_owner_label)} · Due ${escapeHtml(formatAccountDate(item.due_at))}</small><p>${escapeHtml(item.output_summary)} · <em>${escapeHtml(item.screen_state)}</em></p></div></li>`).join('')}</ol><div class="journey-artifact"><span>Output</span><strong>${escapeHtml(workflow.artifact)}</strong><small>${escapeHtml(artifact?.status || 'pending')}</small></div>${active ? `<div class="referral-actions">${attention ? `<button class="button primary" type="button" data-journey-action="resolve_exception" data-workflow-id="${escapeHtml(workflow.id)}" data-application-id="${escapeHtml(application.id)}">Resolve exception</button>` : `<button class="button primary" type="button" data-journey-action="advance_step" data-workflow-id="${escapeHtml(workflow.id)}" data-application-id="${escapeHtml(application.id)}">Complete next action</button><button class="button secondary" type="button" data-journey-action="complete_workflow" data-workflow-id="${escapeHtml(workflow.id)}" data-application-id="${escapeHtml(application.id)}">Complete this workflow</button><button class="button secondary" type="button" data-journey-action="simulate_exception" data-workflow-id="${escapeHtml(workflow.id)}" data-application-id="${escapeHtml(application.id)}">Simulate exception</button>`}</div>` : ''}</div></details>`;
+        }).join('')}
+      </section>
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Attributable history</p><h2>Case journey timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(journeyEventLabel(event))}${event.workflow_id ? ` · ${escapeHtml(event.workflow_id)}` : ''}</strong><small>${escapeHtml(formatReferralDateTime(event.created_at))}</small><p>${escapeHtml(event.summary)}</p></div></li>`).join('') : '<li><div><strong>No journey history is available.</strong></div></li>'}</ol></section>`;
+  } catch (error) {
+    elements.dashboardContent.innerHTML = `<button class="back-button" type="button" data-case-journey-list>← Back to fictional cases</button><div class="form-message error">${escapeHtml(error.message)}</div>`;
+  }
 }
 
 async function saveResidency(form) {
@@ -990,6 +1064,7 @@ function openDashboardView(view) {
   else if (view === 'applications') void renderApplications();
   else if (view === 'referrals' && (isOrganizationType(currentProfile?.account_type) || isPrivilegedRole(currentProfile?.account_type))) void renderReferralNetwork();
   else if (view === 'pending_applications' && isPrivilegedRole(currentProfile?.account_type)) void renderApplicationQueue();
+  else if (['case_journey', 'active_clients', 'document_review', 'messages', 'tasks', 'reports'].includes(view) && isPrivilegedRole(currentProfile?.account_type)) void renderCaseJourneyList(view);
   else if (view === 'staff_management' && currentProfile?.account_type === 'administrator') void renderStaffManagement();
   else if (view === 'organization_approvals' && currentProfile?.account_type === 'administrator') void renderOrganizationApprovals();
   else renderPlaceholder(view);
@@ -1044,6 +1119,31 @@ function wireInterface() {
   elements.dashboardContent.addEventListener('click', event => {
     const button = event.target.closest('[data-open-view]');
     if (button) return openDashboardView(button.dataset.openView);
+    if (event.target.closest('[data-case-journey-list]')) return void renderCaseJourneyList();
+    const openJourneyButton = event.target.closest('[data-open-demo-journey]');
+    if (openJourneyButton) return void renderDemoCaseJourney(openJourneyButton.dataset.openDemoJourney);
+    const journeyActionButton = event.target.closest('[data-journey-action]');
+    if (journeyActionButton) {
+      const action = journeyActionButton.dataset.journeyAction;
+      const confirmations = {
+        complete_workflow: 'Complete every remaining happy-path action in this fictional workflow?',
+        simulate_exception: 'Pause this workflow with its documented fictional exception?',
+        complete_all: 'Complete all remaining fictional workflows and create the finished presentation state?',
+        reset: 'Reset the entire fictional case journey, its synthetic events, and its linked staging referral?'
+      };
+      if (confirmations[action] && !window.confirm(confirmations[action])) return;
+      journeyActionButton.disabled = true;
+      return void adminRequest('/api/intake/demo-case-journey', { method: 'POST', body: {
+        action, applicationId: journeyActionButton.dataset.applicationId, workflowId: journeyActionButton.dataset.workflowId || ''
+      } }).then(() => renderDemoCaseJourney(journeyActionButton.dataset.applicationId, ({
+        advance_step: 'The next accountable workflow action was completed and recorded.',
+        complete_workflow: 'The full fictional workflow was completed.',
+        simulate_exception: 'A safe fictional exception was opened with a visible owner and next step.',
+        resolve_exception: 'The fictional exception was resolved and the workflow can continue.',
+        complete_all: 'All 14 workflows are complete and the presentation state is ready.',
+        reset: 'The fictional case journey was reset to its first workflow.'
+      })[action] || 'Journey updated.')).catch(error => { journeyActionButton.disabled = false; window.alert(error.message); });
+    }
     const openReferralButton = event.target.closest('[data-open-referral]');
     if (openReferralButton) return void renderReferralDetail(openReferralButton.dataset.openReferral);
     if (event.target.closest('[data-back-referrals]')) return void renderReferralNetwork();

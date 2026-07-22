@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/+esm';
-import { demoCaseWorkflows } from './demo-case-workflows.js';
+import { clientCaseWorkflows, facilityBulkImportWorkflow } from './demo-case-workflows.js';
 import { dssForms, getPolicyReferenceUrl, getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
 
 const elements = {
@@ -54,8 +54,13 @@ const dashboardViews = {
   },
   case_journey: {
     title: 'Fictional Case Journey',
-    description: 'Demonstrate the complete case lifecycle across all 14 approved workflows.',
+    description: 'Demonstrate the complete client case lifecycle across 13 approved workflows.',
     empty: 'Submit a complete fictional application to start its case journey.'
+  },
+  facility_import: {
+    title: 'Facility Excel Import',
+    description: 'Facility-only bulk referral workflow.',
+    empty: 'This area is available only to an approved facility account.'
   },
   document_review: {
     title: 'Documents Awaiting Review',
@@ -247,6 +252,7 @@ function configureDashboardNavigation() {
     : [
         ['home', 'H', 'Home'],
         ['applications', 'A', 'Applications'],
+        ...(role === 'facility' && currentProfile?.status === 'active' ? [['facility_import', 'X', 'Excel Referral Import']] : []),
         ['documents', 'D', 'Documents'],
         ['messages', 'M', 'Messages'],
         ['referrals', 'R', isOrganizationType(role) ? 'Referral Network' : 'Community Referrals'],
@@ -294,7 +300,7 @@ function renderHome() {
       ['applications', 'I', 'Intake Programs', 'Review NCDHHS policy-guided intake pathways.'],
       ['active_clients', 'C', 'Active Clients', 'View authorized client assignments.'],
       ['pending_applications', 'A', 'Pending Applications', 'Review applications requiring action.'],
-      ['case_journey', 'J', 'Fictional Case Journey', 'Demonstrate all 14 workflows from referral through audit and closure.'],
+      ['case_journey', 'J', 'Fictional Case Journey', 'Demonstrate all 13 client-case workflows from referral through audit and closure.'],
       ['document_review', 'D', 'Documents Awaiting Review', 'Manage the protected document-review queue.'],
       ['referrals', 'R', 'Referral Network', 'Receive, send, and track organization referrals.'],
       ['messages', 'M', 'Messages', 'Open secure staff communications.'],
@@ -325,6 +331,7 @@ function renderHome() {
     <section class="dashboard-grid" aria-label="Account areas">
       ${[
         ['applications', 'A', 'Applications', 'Start and track Medicaid applications.'],
+        ...(currentProfile?.account_type === 'facility' ? [['facility_import', 'X', 'Excel Referral Import', 'Upload and reconcile multi-resident fictional referral batches.']] : []),
         ['documents', 'D', 'Documents', 'Review document requirements and requests.'],
         ['messages', 'M', 'Messages', 'Communicate securely with the MMS team.'],
         ['referrals', 'R', isOrganizationType(currentProfile?.account_type) ? 'Referral Network' : 'Community Referrals', isOrganizationType(currentProfile?.account_type) ? 'Refer fictional test clients to MMS or another approved organization.' : 'Follow referrals to community resources.'],
@@ -468,6 +475,20 @@ async function startTestApplication(programId) {
   if (!program || !isPrivilegedRole(currentProfile?.account_type)) throw new Error('This test pathway is not available.');
   const { application } = await adminRequest('/api/intake/test-applications', { method: 'POST', body: { action: 'create', programId: program.id } });
   await renderApplicantInformation(application.id);
+}
+
+function renderFacilityImport() {
+  if (currentProfile?.account_type !== 'facility' || currentProfile?.status !== 'active') return renderHome();
+  const workflow = facilityBulkImportWorkflow;
+  elements.headerViewName.textContent = 'Facility Excel Import';
+  elements.dashboardContent.innerHTML = `
+    <section class="content-heading"><p class="eyebrow">Approved facilities only</p><h1>Facility Excel Referral Import</h1><p>${escapeHtml(workflow.summary)}</p></section>
+    <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Facility-only staging workflow.</strong><p>This workflow is not displayed in a client or authorized-representative account. Use fictional residents only until protected production import is approved.</p></div></div>
+    <section class="admin-panel">
+      <div class="referral-section-heading"><div><h2>${escapeHtml(workflow.title)}</h2><p>${escapeHtml(workflow.statuses)}</p></div><span class="status-pill">Facility access</span></div>
+      <ol class="journey-step-list">${workflow.steps.map((item, index) => `<li><span>${index + 1}</span><div><strong>${escapeHtml(item.action)}</strong><small>${escapeHtml(item.actor)} → ${escapeHtml(item.owner)}</small><p>${escapeHtml(item.output)} · <em>${escapeHtml(item.screen)}</em></p></div></li>`).join('')}</ol>
+      <div class="policy-notice">The protected Excel upload control will be activated after its malware-scanning, duplicate-detection, and authorization gates are connected. The workflow remains separated from individual client applications.</div>
+    </section>`;
 }
 
 async function startCompleteDemoApplication(programId) {
@@ -738,7 +759,7 @@ async function renderApplicationReview(applicationId, notice = '') {
       ${editableDraft ? `<label class="test-confirmation"><input id="submitFictionalConfirmation" type="checkbox"><span>I confirm the entire application is fictional and authorize submission to the MMS staging review queue.</span></label><div class="intake-form-actions"><button class="button secondary" type="button" data-open-test-step="support" data-application-id="${escapeHtml(application.id)}">Back to support needs</button><button class="button primary" type="button" data-submit-test-application="${escapeHtml(application.id)}" ${completion.ready ? '' : 'disabled'}>Submit fictional application</button></div>` : `<div class="policy-notice">This fictional application is read-only because its status is ${escapeHtml(application.status.replaceAll('_', ' '))}. Use Reset from the Applications or Pending Applications page to start it again as a blank draft.</div>`}
     </section>
     ${outboundReferralPanel}
-    ${application.status !== 'draft' ? `<section class="intake-test-action case-journey-launch"><div><p class="eyebrow">Presentation workflow</p><strong>Continue through the complete fictional case journey</strong><p>Demonstrate referral intake, onboarding, checklist generation, documents, quality review, DSS follow-up, decisions, placement, community referrals, renewals, messages, administration, audit, and incident response.</p></div><button class="button primary" type="button" data-open-demo-journey="${escapeHtml(application.id)}">Open all 14 workflows</button></section>` : ''}
+    ${application.status !== 'draft' ? `<section class="intake-test-action case-journey-launch"><div><p class="eyebrow">Presentation workflow</p><strong>Continue through the complete fictional client case journey</strong><p>Demonstrate referral intake, onboarding, checklist generation, documents, quality review, DSS follow-up, decisions, placement, community referrals, renewals, messages, administration, audit, and incident response. Facility Excel import is intentionally excluded.</p></div><button class="button primary" type="button" data-open-demo-journey="${escapeHtml(application.id)}">Open all 13 client workflows</button></section>` : ''}
     ${administrator && application.status !== 'draft' ? `<section class="admin-panel"><h2>Administrator review</h2><form id="reviewStatusForm" data-application-id="${escapeHtml(application.id)}"><div class="two-fields"><div class="field"><label for="reviewStatus">Review status</label><select id="reviewStatus" name="status">${optionList({ under_review: 'Under review', information_requested: 'Information requested', approved: 'Approved test', denied: 'Denied test', closed: 'Closed' }, application.status === 'submitted' ? 'under_review' : application.status)}</select></div><div class="field"><label>Safety boundary</label><p class="field-help">Status changes apply only to this fictional staging record.</p></div></div><button class="button primary" type="submit">Update review status</button></form></section>` : ''}`;
 }
 
@@ -750,7 +771,7 @@ async function renderApplicationQueue(notice = '') {
 }
 
 const caseModuleCopy = {
-  case_journey: ['Fictional Case Journey', 'Run the full approved workflow from referral intake through renewal, administration, audit, and closure.'],
+  case_journey: ['Fictional Case Journey', 'Run all 13 client-case workflows from referral intake through renewal, administration, audit, and closure. Facility bulk import is separate.'],
   active_clients: ['Active Fictional Clients', 'Open a submitted fictional case to demonstrate its owners, next actions, artifacts, and complete lifecycle.'],
   document_review: ['Fictional Document Review', 'Open a case and expand WF-05 to demonstrate requests, secure upload simulation, classification, review, and accepted evidence.'],
   messages: ['Fictional Messages & Appointments', 'Open a case and expand WF-13 to demonstrate secure messages, delivery states, replies, appointments, and outcomes.'],
@@ -767,7 +788,7 @@ async function renderCaseJourneyList(view = 'case_journey', notice = '') {
     <section class="content-heading"><p class="eyebrow">Complete synthetic workflow</p><h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p></section>
     ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
     <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Presentation-safe fictional records only.</strong><p>Each case journey is staging-only, persistent, attributable, and separated from production data.</p></div></div>
-    <section class="admin-panel"><div class="referral-section-heading"><div><h2>Submitted fictional cases</h2><p>Select a case to open all 14 workflow specifications in one workspace.</p></div><button class="button secondary" type="button" data-open-view="applications">Create another fictional case</button></div>
+    <section class="admin-panel"><div class="referral-section-heading"><div><h2>Submitted fictional cases</h2><p>Select a case to open all 13 client-case workflows in one workspace. Facility bulk import is not part of an individual client case.</p></div><button class="button secondary" type="button" data-open-view="applications">Create another fictional case</button></div>
       ${submitted.length ? `<div class="test-application-list">${submitted.map(application => `<article><div><strong>${escapeHtml(application.applicant_name)}</strong><span>${escapeHtml(programTitle(application.program_id))} · ${escapeHtml(application.status.replaceAll('_', ' '))} · Policy ${escapeHtml(application.policy_version)}</span></div><div class="test-case-actions"><button class="button primary" type="button" data-open-demo-journey="${escapeHtml(application.id)}">Open complete journey</button><button type="button" data-review-test-application="${escapeHtml(application.id)}">Application review</button></div></article>`).join('')}</div>` : '<p class="admin-empty">No submitted fictional application is available. Create the complete Fiona Quirk demo and submit it first.</p>'}
     </section>`;
 }
@@ -797,8 +818,8 @@ async function renderDemoCaseJourney(applicationId, notice = '') {
         <article><span>Artifacts</span><strong>${artifacts.filter(item => item.status === 'complete').length} / ${artifacts.length}</strong><small>persistent synthetic outputs</small></article>
       </section>
       <section class="journey-control-bar"><div><strong>Demonstration controls</strong><p>Advance one action, complete one workflow, simulate an exception, or prepare the finished presentation state.</p></div><div class="official-actions">${journey.status !== 'completed' ? `<button class="button primary" type="button" data-journey-action="complete_all" data-application-id="${escapeHtml(application.id)}">Complete all remaining workflows</button>` : '<button class="button secondary" type="button" data-open-view="referrals">Open completed referral</button>'}<button class="button secondary" type="button" data-journey-action="reset" data-application-id="${escapeHtml(application.id)}">Reset journey</button></div></section>
-      <section class="journey-workflows" aria-label="Fourteen fictional workflows">
-        ${demoCaseWorkflows.map(workflow => {
+      <section class="journey-workflows" aria-label="Thirteen fictional client-case workflows">
+        ${clientCaseWorkflows.map(workflow => {
           const workflowSteps = steps.filter(item => item.workflow_id === workflow.id);
           const completedCount = workflowSteps.filter(item => item.status === 'completed' || item.status === 'skipped').length;
           const completed = workflowSteps.length > 0 && completedCount === workflowSteps.length;
@@ -1062,6 +1083,7 @@ function openDashboardView(view) {
   if (view === 'home') renderHome();
   else if (view === 'profile') renderProfile();
   else if (view === 'applications') void renderApplications();
+  else if (view === 'facility_import') return currentProfile?.account_type === 'facility' && currentProfile?.status === 'active' ? renderFacilityImport() : renderHome();
   else if (view === 'referrals' && (isOrganizationType(currentProfile?.account_type) || isPrivilegedRole(currentProfile?.account_type))) void renderReferralNetwork();
   else if (view === 'pending_applications' && isPrivilegedRole(currentProfile?.account_type)) void renderApplicationQueue();
   else if (['case_journey', 'active_clients', 'document_review', 'messages', 'tasks', 'reports'].includes(view) && isPrivilegedRole(currentProfile?.account_type)) void renderCaseJourneyList(view);
@@ -1140,7 +1162,7 @@ function wireInterface() {
         complete_workflow: 'The full fictional workflow was completed.',
         simulate_exception: 'A safe fictional exception was opened with a visible owner and next step.',
         resolve_exception: 'The fictional exception was resolved and the workflow can continue.',
-        complete_all: 'All 14 workflows are complete and the presentation state is ready.',
+        complete_all: 'All 13 client-case workflows are complete and the presentation state is ready.',
         reset: 'The fictional case journey was reset to its first workflow.'
       })[action] || 'Journey updated.')).catch(error => { journeyActionButton.disabled = false; window.alert(error.message); });
     }

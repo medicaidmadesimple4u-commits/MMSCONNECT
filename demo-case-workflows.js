@@ -16,6 +16,7 @@ export const demoCaseWorkflows = [
   },
   {
     id: 'WF-02', title: 'Facility Excel bulk import', artifact: 'Bulk-import reconciliation',
+    audience: 'facility',
     summary: 'Validate a controlled facility spreadsheet and create referrals without silent partial imports.',
     statuses: 'Uploaded → Scanning → Validating → Review → Imported',
     exception: 'A wrong template, unsafe file, duplicate upload, or prohibited column is held with an explicit reason.',
@@ -192,6 +193,9 @@ export function demoWorkflowById(id) {
   return demoCaseWorkflows.find(workflow => workflow.id === id) || null;
 }
 
-export function totalDemoSteps() {
-  return demoCaseWorkflows.reduce((total, workflow) => total + workflow.steps.length, 0);
+export const clientCaseWorkflows = demoCaseWorkflows.filter(workflow => workflow.audience !== 'facility');
+export const facilityBulkImportWorkflow = demoCaseWorkflows.find(workflow => workflow.id === 'WF-02');
+
+export function totalDemoSteps(workflows = demoCaseWorkflows) {
+  return workflows.reduce((total, workflow) => total + workflow.steps.length, 0);
 }

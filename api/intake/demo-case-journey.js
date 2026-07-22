@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { demoCaseWorkflows, demoWorkflowById, totalDemoSteps } from '../../demo-case-workflows.js';
+import { clientCaseWorkflows, totalDemoSteps } from '../../demo-case-workflows.js';
 import { requestBody, requireAllowedOrigin, requireMethod, requirePrivilegedUser, safeError, sendJson, serviceRequest } from '../../lib/admin.js';
 
 const mmsOrganizationId = '00000000-0000-4000-8000-000000000001';
@@ -11,6 +11,10 @@ function validUuid(value) {
 
 function stagingEnabled() {
   return (process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || 'development') !== 'production';
+}
+
+function clientWorkflowById(id) {
+  return clientCaseWorkflows.find(workflow => workflow.id === id) || null;
 }
 
 async function accessibleApplication(staff, applicationId) {
@@ -27,7 +31,7 @@ async function addEvent(applicationId, staff, eventType, summary, workflowId = n
 
 function flattenedStepRows(applicationId) {
   let globalOrder = 0;
-  return demoCaseWorkflows.flatMap((workflow, workflowIndex) => workflow.steps.map((item, stepIndex) => {
+  return clientCaseWorkflows.flatMap((workflow, workflowIndex) => workflow.steps.map((item, stepIndex) => {
     globalOrder += 1;
     return {
       application_id: applicationId, workflow_id: workflow.id, workflow_order: workflowIndex + 1, step_order: stepIndex + 1, global_order: globalOrder,
@@ -41,15 +45,15 @@ async function initializeJourney(application, staff) {
   let journeys = await serviceRequest(`/rest/v1/demo_case_journeys?select=*&application_id=eq.${encodeURIComponent(application.id)}&limit=1`);
   if (!journeys?.length) {
     await serviceRequest('/rest/v1/demo_case_journeys', { method: 'POST', prefer: 'return=minimal', body: {
-      application_id: application.id, status: 'active', current_workflow_id: demoCaseWorkflows[0].id, next_action: demoCaseWorkflows[0].steps[0].action,
+      application_id: application.id, status: 'active', current_workflow_id: clientCaseWorkflows[0].id, next_action: clientCaseWorkflows[0].steps[0].action,
       created_by: staff.user.id, environment: 'staging', test_mode: true
     } });
     await serviceRequest('/rest/v1/demo_case_workflow_steps', { method: 'POST', prefer: 'return=minimal', body: flattenedStepRows(application.id) });
-    await serviceRequest('/rest/v1/demo_case_artifacts', { method: 'POST', prefer: 'return=minimal', body: demoCaseWorkflows.map((workflow, index) => ({
+    await serviceRequest('/rest/v1/demo_case_artifacts', { method: 'POST', prefer: 'return=minimal', body: clientCaseWorkflows.map((workflow, index) => ({
       application_id: application.id, workflow_id: workflow.id, label: workflow.artifact, status: index === 0 ? 'in_progress' : 'pending',
       details: { summary: workflow.summary, statuses: workflow.statuses, exception: workflow.exception }
     })) });
-    await addEvent(application.id, staff, 'journey_initialized', `Complete ${demoCaseWorkflows.length}-workflow fictional case journey created with ${totalDemoSteps()} accountable steps.`);
+    await addEvent(application.id, staff, 'journey_initialized', `Complete ${clientCaseWorkflows.length}-workflow fictional client case journey created with ${totalDemoSteps(clientCaseWorkflows)} accountable steps.`);
     journeys = await serviceRequest(`/rest/v1/demo_case_journeys?select=*&application_id=eq.${encodeURIComponent(application.id)}&limit=1`);
   }
   return journeys[0];
@@ -67,14 +71,14 @@ async function loadWorkspace(application) {
   ]);
   const journey = journeys?.[0] || null;
   const completedSteps = (steps || []).filter(item => item.status === 'completed' || item.status === 'skipped').length;
-  const completedWorkflows = demoCaseWorkflows.filter(workflow => {
+  const completedWorkflows = clientCaseWorkflows.filter(workflow => {
     const workflowSteps = (steps || []).filter(item => item.workflow_id === workflow.id);
     return workflowSteps.length > 0 && workflowSteps.every(item => item.status === 'completed' || item.status === 'skipped');
   }).length;
   return {
     application: applications?.[0] || application, applicant_name: applicants?.[0] ? `${applicants[0].legal_first_name} ${applicants[0].legal_last_name}` : 'Fictional applicant',
     journey, steps: steps || [], artifacts: artifacts || [], events: events || [],
-    progress: { completedSteps, totalSteps: (steps || []).length, completedWorkflows, totalWorkflows: demoCaseWorkflows.length }
+    progress: { completedSteps, totalSteps: (steps || []).length, completedWorkflows, totalWorkflows: clientCaseWorkflows.length }
   };
 }
 
@@ -125,7 +129,7 @@ async function ensureCompletedCommunityReferral(application, staff) {
 
 async function requireCurrentWorkflow(application, workflowId) {
   const workspace = await loadWorkspace(application);
-  if (!demoWorkflowById(workflowId)) {
+  if (!clientWorkflowById(workflowId)) {
     const error = new Error('Select a valid fictional workflow.'); error.status = 400; throw error;
   }
   if (workspace.journey?.current_workflow_id !== workflowId) {
@@ -174,7 +178,7 @@ export default async function handler(request, response) {
       const remaining = workspace.steps.filter(item => item.workflow_id === workflowId && item.id !== stepItem.id && item.status !== 'completed' && item.status !== 'skipped');
       if (!remaining.length) {
         await serviceRequest(`/rest/v1/demo_case_artifacts?application_id=eq.${encodeURIComponent(application.id)}&workflow_id=eq.${encodeURIComponent(workflowId)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'complete', completed_at: new Date().toISOString() } });
-        await addEvent(application.id, staff, 'workflow_completed', `${workflowId} ${demoWorkflowById(workflowId).title} completed.`, workflowId);
+        await addEvent(application.id, staff, 'workflow_completed', `${workflowId} ${clientWorkflowById(workflowId).title} completed.`, workflowId);
         if (workflowId === 'WF-11') await ensureCompletedCommunityReferral(application, staff);
         if (workflowId === 'WF-09') await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'approved' } });
         if (workflowId === 'WF-14') await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'closed' } });
@@ -187,7 +191,7 @@ export default async function handler(request, response) {
       if (workspace.journey.status === 'attention') return sendJson(response, 409, { error: 'Resolve the simulated exception before completing this workflow.' });
       await serviceRequest(`/rest/v1/demo_case_workflow_steps?application_id=eq.${encodeURIComponent(application.id)}&workflow_id=eq.${encodeURIComponent(workflowId)}&status=not.in.(completed,skipped)`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'completed', completed_by: staff.user.id, completed_at: new Date().toISOString() } });
       await serviceRequest(`/rest/v1/demo_case_artifacts?application_id=eq.${encodeURIComponent(application.id)}&workflow_id=eq.${encodeURIComponent(workflowId)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'complete', completed_at: new Date().toISOString() } });
-      await addEvent(application.id, staff, 'workflow_completed', `${workflowId} ${demoWorkflowById(workflowId).title} completed through its full fictional happy path.`, workflowId);
+      await addEvent(application.id, staff, 'workflow_completed', `${workflowId} ${clientWorkflowById(workflowId).title} completed through its full fictional happy path.`, workflowId);
       if (workflowId === 'WF-11') await ensureCompletedCommunityReferral(application, staff);
       if (workflowId === 'WF-09') await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'approved' } });
       if (workflowId === 'WF-14') await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'closed' } });
@@ -198,7 +202,7 @@ export default async function handler(request, response) {
       const workspace = await requireCurrentWorkflow(application, workflowId);
       if (workspace.journey.status === 'attention') return sendJson(response, 409, { error: 'A fictional exception is already open.' });
       const stepItem = workspace.steps.find(item => item.workflow_id === workflowId && item.status !== 'completed' && item.status !== 'skipped');
-      const exception = demoWorkflowById(workflowId).exception;
+      const exception = clientWorkflowById(workflowId).exception;
       await serviceRequest(`/rest/v1/demo_case_workflow_steps?id=eq.${encodeURIComponent(stepItem.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'blocked' } });
       await serviceRequest(`/rest/v1/demo_case_journeys?application_id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'attention', exception_summary: exception, next_action: 'Resolve the fictional exception and document the safe next step.' } });
       await serviceRequest(`/rest/v1/demo_case_artifacts?application_id=eq.${encodeURIComponent(application.id)}&workflow_id=eq.${encodeURIComponent(workflowId)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'attention' } });
@@ -223,7 +227,7 @@ export default async function handler(request, response) {
       await serviceRequest(`/rest/v1/demo_case_journeys?application_id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { exception_summary: null } });
       await ensureCompletedCommunityReferral(application, staff);
       await serviceRequest(`/rest/v1/applications?id=eq.${encodeURIComponent(application.id)}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'closed' } });
-      await addEvent(application.id, staff, 'journey_completed', 'All 14 fictional workflows completed with attributable steps, artifacts, referral outcome, and closure evidence.');
+      await addEvent(application.id, staff, 'journey_completed', 'All 13 fictional client-case workflows completed with attributable steps, artifacts, referral outcome, and closure evidence.');
       return sendJson(response, 200, await refreshProgress(application, staff));
     }
 

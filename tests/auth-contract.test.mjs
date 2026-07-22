@@ -253,15 +253,20 @@ test('staging includes fictional companies and a full referral simulator without
   assert.match(script, /End-to-end test lab/);
 });
 
-test('fictional case journey implements all fourteen approved workflows as persistent staging actions', async () => {
-  const [script, api, sql, workflowModule] = await Promise.all([
+test('fictional case journey separates the facility bulk import from thirteen client workflows', async () => {
+  const [script, api, sql, separationSql, workflowModule] = await Promise.all([
     read('auth.js'), read('api/intake/demo-case-journey.js'), read('supabase/migrations/20260717043000_add_demo_case_journey.sql'),
+    read('supabase/migrations/20260722093000_separate_facility_import_from_client_case.sql'),
     import(new URL('demo-case-workflows.js', root))
   ]);
-  const { demoCaseWorkflows, totalDemoSteps } = workflowModule;
+  const { clientCaseWorkflows, demoCaseWorkflows, facilityBulkImportWorkflow, totalDemoSteps } = workflowModule;
   assert.equal(demoCaseWorkflows.length, 14);
   assert.deepEqual(demoCaseWorkflows.map(item => item.id), Array.from({ length: 14 }, (_, index) => `WF-${String(index + 1).padStart(2, '0')}`));
   assert.ok(totalDemoSteps() >= 70, 'the journey should retain accountable detail across every workflow');
+  assert.equal(facilityBulkImportWorkflow.id, 'WF-02');
+  assert.equal(facilityBulkImportWorkflow.audience, 'facility');
+  assert.equal(clientCaseWorkflows.length, 13);
+  assert.ok(!clientCaseWorkflows.some(item => item.id === 'WF-02'));
   for (const workflow of demoCaseWorkflows) {
     assert.ok(workflow.title && workflow.artifact && workflow.summary && workflow.statuses && workflow.exception);
     assert.ok(workflow.steps.length >= 5);
@@ -275,7 +280,15 @@ test('fictional case journey implements all fourteen approved workflows as persi
   assert.match(api, /environment=eq\.staging/);
   assert.match(api, /available only in staging/);
   assert.match(script, /renderDemoCaseJourney/);
-  assert.match(script, /Open all 14 workflows/);
+  assert.match(script, /Open all 13 client workflows/);
+  assert.match(script, /currentProfile\?\.account_type === 'facility'/);
+  assert.match(script, /renderFacilityImport/);
+  assert.match(script, /clientCaseWorkflows\.map/);
+  assert.doesNotMatch(script, /demoCaseWorkflows\.map/);
+  assert.match(api, /clientWorkflowById/);
+  assert.match(separationSql, /delete from public\.demo_case_workflow_steps\s+where workflow_id = 'WF-02'/i);
+  assert.match(separationSql, /delete from public\.demo_case_artifacts\s+where workflow_id = 'WF-02'/i);
+  assert.match(separationSql, /reserved for facility accounts/i);
   assert.match(script, /data-journey-action/);
   for (const table of ['demo_case_journeys', 'demo_case_workflow_steps', 'demo_case_artifacts', 'demo_case_journey_events']) {
     assert.match(sql, new RegExp(`create table if not exists public\\.${table}`, 'i'));

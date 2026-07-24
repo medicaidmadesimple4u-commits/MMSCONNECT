@@ -396,7 +396,9 @@ function programTitle(programId) {
 }
 
 function policyReferenceLinks(references) {
-  return references.map(reference => `<a href="${escapeHtml(getPolicyReferenceUrl(reference))}" target="_blank" rel="noopener noreferrer">${escapeHtml(reference)}</a>`).join(' · ');
+  return references.map(reference => reference === 'MMS service coordination — not an eligibility factor'
+    ? `<button class="policy-navigation-link" type="button" data-open-view="referrals">${escapeHtml(reference)} → Open Referral Network</button>`
+    : `<a href="${escapeHtml(getPolicyReferenceUrl(reference))}" target="_blank" rel="noopener noreferrer">${escapeHtml(reference)}</a>`).join(' · ');
 }
 
 async function loadOwnedTestApplications() {

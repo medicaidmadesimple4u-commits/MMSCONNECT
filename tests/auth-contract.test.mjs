@@ -88,6 +88,7 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm', 'resourceForm', 'livingArrangementForm', 'healthCoverageForm', 'authorizedRepresentativeForm', 'reviewStatusForm']) assert.match(script, new RegExp(formId));
   for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status', 'reset', 'delete_application']) assert.match(script, new RegExp(action));
   assert.match(script, /policyReferenceLinks/);
+  assert.match(script, /data-open-view="referrals".*Open Referral Network/);
   assert.match(script, /Application forms and official entry steps/);
   assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);

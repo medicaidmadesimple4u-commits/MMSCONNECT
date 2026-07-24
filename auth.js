@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/+esm';
 import { clientCaseWorkflows, facilityBulkImportWorkflow } from './demo-case-workflows.js';
-import { dssForms, getPolicyReferenceUrl, getProgram, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
+import { getPolicyReferenceUrl, getProgram, getProgramForms, getProgramManuals, getProgramSections, getProgramSources, medicaidPrograms, policyRelease } from './intake-policy.js';
 
 const elements = {
   loading: document.getElementById('loadingScreen'),
@@ -417,6 +417,8 @@ async function renderApplications(selectedProgramId = '', notice = '') {
   const selected = getProgram(selectedProgramId);
   const checklist = selected ? getProgramSections(selected.id) : [];
   const sources = selected ? getProgramSources(selected.id) : [];
+  const manuals = selected ? getProgramManuals(selected.id) : [];
+  const forms = selected ? getProgramForms(selected.id) : [];
   const canRunTest = intakeMode === 'fictional_test' && isPrivilegedRole(currentProfile?.account_type);
   let testApplications = [];
   let testLoadError = '';
@@ -429,10 +431,10 @@ async function renderApplications(selectedProgramId = '', notice = '') {
     <section class="content-heading">
       <p class="eyebrow">NCDHHS policy guide</p>
       <h1>${guideOnly ? 'Explore programs and official forms' : 'Choose an intake pathway'}</h1>
-      <p>${guideOnly ? 'Use this guide to understand common NC Medicaid pathways, then apply securely through NC ePASS or your county Department of Social Services.' : 'This preview maps each NC Medicaid pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.'}</p>
+      <p>${guideOnly ? 'Choose a pathway to open its current program manuals, application forms, and official entry steps.' : 'This preview maps each pathway to the information MMS Connect will organize. It does not determine eligibility or submit an application to the State.'}</p>
     </section>
     ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
-    <div class="safety-banner"><span aria-hidden="true">${guideOnly ? 'i' : '!'}</span><div><strong>${guideOnly ? 'Official application handoff.' : 'Preview with test scenarios only.'}</strong><p>${guideOnly ? 'MMS Connect does not collect your Medicaid application or confidential documents in this release. Use the official ePASS or DSS links below.' : 'Public intake remains disabled. Only active MMS staff and administrators may save completely fictional staging records for security testing.'}</p></div></div>
+    <div class="safety-banner"><span aria-hidden="true">${guideOnly ? 'i' : '!'}</span><div><strong>${guideOnly ? 'Official application handoff.' : 'Preview with test scenarios only.'}</strong><p>${guideOnly ? 'MMS Connect does not collect your Medicaid application or confidential documents in this release. Use the official ePASS, DSS, or program-coordinator links shown for the selected pathway.' : 'Public intake remains disabled. Only active MMS staff and administrators may save completely fictional staging records for security testing.'}</p></div></div>
     ${canRunTest ? `<section class="test-application-panel"><div><p class="eyebrow">Staging security test</p><h2>Fictional test applications</h2><p>Only active MMS staff and administrators can create these staging-only records.</p></div>${testLoadError ? `<div class="form-message error">${escapeHtml(testLoadError)}</div>` : renderTestApplicationList(testApplications)}</section>` : ''}
     <section class="policy-summary" aria-label="Policy release information">
       <div><span>Policy set</span><strong>NCDHHS ${escapeHtml(policyRelease.version)}</strong></div>
@@ -448,7 +450,7 @@ async function renderApplications(selectedProgramId = '', notice = '') {
               <h3>${escapeHtml(program.title)}</h3>
               <p>${escapeHtml(program.audience)}</p>
               <small>Policy: ${policyReferenceLinks(program.manualRefs)}</small>
-              <button type="button" data-program-id="${escapeHtml(program.id)}">View intake map</button>
+              <button type="button" data-program-id="${escapeHtml(program.id)}">View pathway resources</button>
             </article>`).join('')}
         </div>
       </section>`).join('')}
@@ -456,7 +458,7 @@ async function renderApplications(selectedProgramId = '', notice = '') {
       <section class="intake-map" id="intakeMap" tabindex="-1">
         <div class="intake-map-heading">
           <div><p class="eyebrow">Selected pathway</p><h2>${escapeHtml(selected.title)}</h2><p>${escapeHtml(selected.audience)}</p></div>
-          <span class="status-pill">Policy preview</span>
+          <span class="status-pill">Official resource map</span>
         </div>
         <p class="policy-notice">${escapeHtml(policyRelease.notice)}</p>
         <ol class="intake-section-list">
@@ -464,7 +466,16 @@ async function renderApplications(selectedProgramId = '', notice = '') {
         </ol>
         ${canRunTest ? `<div class="intake-test-action"><div><strong>Test the protected workflow</strong><p>Start a blank draft for manual testing or load a complete funny scenario that is ready for review and submission.</p></div><div class="official-actions"><button class="button secondary" type="button" data-start-test-application="${escapeHtml(selected.id)}">Start blank test</button><button class="button primary" type="button" data-start-complete-demo="${escapeHtml(selected.id)}">Create complete funny demo</button></div></div>` : ''}
         ${guideOnly ? `<div class="intake-test-action"><div><strong>Ready to apply?</strong><p>Continue through an official North Carolina application channel. MMS Connect does not transmit an application to the State.</p></div><div class="official-actions"><a class="button primary" href="https://epass.nc.gov/" target="_blank" rel="noopener noreferrer">Apply through ePASS</a><a class="button secondary" href="https://www.ncdhhs.gov/divisions/social-services/local-dss-directory" target="_blank" rel="noopener noreferrer">Find county DSS</a></div></div>` : ''}
-        <div class="policy-sources"><h3>Official NCDHHS sources</h3><ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul><h3>Official NC Medicaid and DSS forms</h3><div class="official-form-grid">${dssForms.map(form => `<a href="${escapeHtml(form.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(form.title)}</strong><span>Open official form ↗</span></a>`).join('')}</div><p>Income and resource standards change. MMS Connect links to current official sources instead of treating a displayed amount as an eligibility decision.</p></div>
+        <div class="policy-sources">
+          <h3>Program manuals and policy sections</h3>
+          <div class="official-form-grid">${manuals.map(manual => `<a href="${escapeHtml(manual.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(manual.title)}</strong><span>Open current manual ↗</span></a>`).join('')}</div>
+          <h3>Application forms and official entry steps</h3>
+          <p class="policy-notice">These official forms are commonly used for this pathway. The county DSS or program coordinator decides which conditional supplements are required for an individual case.</p>
+          <div class="official-form-grid">${forms.map(form => `<a href="${escapeHtml(form.url)}" target="_blank" rel="noopener noreferrer"><strong>${escapeHtml(form.title)}</strong><span>${escapeHtml(form.kind)} · ${escapeHtml(form.when)}</span><small>Open official resource ↗</small></a>`).join('')}</div>
+          <h3>Additional official NCDHHS sources</h3>
+          <ul>${sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul>
+          <p>Income and resource standards change. MMS Connect links to current official sources instead of treating a displayed amount as an eligibility decision.</p>
+        </div>
       </section>` : ''}`;
 
   if (selected) document.getElementById('intakeMap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -989,11 +1000,11 @@ function referralEventActor(event) {
   return `${event.actor_name}${event.actor_organization ? ` · ${event.actor_organization}` : ''}`;
 }
 
-function referralListTable(referrals) {
+function referralListTable(referrals, lite = false) {
   if (!referrals.length) return '<p class="admin-empty">No referrals are available yet.</p>';
-  return `<div class="admin-table-wrap"><table class="admin-table referral-table"><thead><tr><th>Reference</th><th>Client / case</th><th>Route</th><th>Service</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${referrals.map(referral => `<tr>
+  return `<div class="admin-table-wrap"><table class="admin-table referral-table"><thead><tr><th>Reference</th>${lite ? '' : '<th>Client / case</th>'}<th>Route</th><th>Service</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>${referrals.map(referral => `<tr>
     <td><strong>${escapeHtml(referral.reference_number)}</strong><small>${referral.is_recipient ? 'Received' : referral.is_sender ? 'Sent' : 'MMS oversight'}</small></td>
-    <td>${escapeHtml(referral.client_label)}</td>
+    ${lite ? '' : `<td>${escapeHtml(referral.client_label)}</td>`}
     <td><small>${escapeHtml(referral.sender_organization)}${referral.sender_is_test ? ' <span class="demo-badge">Demo</span>' : ''}</small><span class="referral-route-arrow" aria-hidden="true">→</span><small>${escapeHtml(referral.recipient_organization)}${referral.recipient_is_test ? ' <span class="demo-badge">Demo</span>' : ''}</small></td>
     <td>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</td>
     <td><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></td>
@@ -1012,37 +1023,38 @@ async function renderReferralNetwork(notice = '') {
   elements.dashboardContent.innerHTML = '<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Loading your referral workspace…</p></section>';
   try {
     const data = await adminRequest('/api/referrals');
+    const lite = data.referralMode === 'referral_lite';
     const referrals = data.referrals || [];
     const received = referrals.filter(referral => referral.is_recipient).length;
     const needsResponse = referrals.filter(referral => referral.is_recipient && ['sent', 'acknowledged'].includes(referral.status)).length;
     const active = referrals.filter(referral => ['accepted', 'in_progress'].includes(referral.status)).length;
     const completed = referrals.filter(referral => ['completed', 'closed'].includes(referral.status)).length;
     const canCreate = data.directory?.length > 0;
-    const demoOrganizations = data.demoOrganizations || [];
+    const demoOrganizations = lite ? [] : data.demoOrganizations || [];
+    const detailFields = lite ? '' : `
+      <div class="two-fields"><div class="field"><label for="referralClientLabel">Fictional client or case label</label><input id="referralClientLabel" name="clientLabel" maxlength="120" placeholder="Example: Captain Tater Tot" required><small class="field-help">Use an invented label for staging. Do not use a real client name.</small></div>
+      <div class="field"><label for="referralUrgency">Urgency</label><select id="referralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div>
+      <div class="field"><label for="referralSummary">Fictional referral summary</label><textarea id="referralSummary" name="summary" minlength="10" maxlength="1000" placeholder="Describe the fictional need and requested next step." required></textarea><small class="field-help">Never include test SSNs, even fictional ones.</small></div>`;
     elements.dashboardContent.innerHTML = `
-      <section class="content-heading referral-heading"><div><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>Send a referral to Medicaid Made Simple or another approved organization and follow it through completion.</p></div><span class="status-pill">${escapeHtml(data.organization?.name || roleLabel(currentProfile?.account_type))}</span></section>
+      <section class="content-heading referral-heading"><div><p class="eyebrow">Connected care</p><h1>Referral Network</h1><p>${lite ? 'Route an anonymous service request between approved organizations and track its status.' : 'Send a fictional referral to Medicaid Made Simple or another approved organization and follow it through completion.'}</p></div><span class="status-pill">${escapeHtml(data.organization?.name || roleLabel(currentProfile?.account_type))}</span></section>
       ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
-      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging referrals only.</strong><p>Use invented names and scenarios. Do not enter Social Security numbers, dates of birth, medical records, financial details, or real client information.</p></div></div>
-      <section class="referral-metrics" aria-label="Referral summary">
-        ${[['Received', received], ['Needs response', needsResponse], ['Active', active], ['Completed', completed]].map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}
-      </section>
-      <section class="admin-panel referral-compose"><div class="referral-section-heading"><div><p class="eyebrow">New connection</p><h2>Create a referral</h2><p>The recipient will see the referral in its own inbox and can acknowledge, accept, decline, and complete it.</p></div></div>
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>${lite ? 'Referral Lite — no client information.' : 'Fictional staging referrals only.'}</strong><p>${lite ? 'Enter only the organization, broad service category, urgency, and consent confirmation. Do not enter a client name, contact information, date of birth, identifier, medical or financial information, case summary, note, or document. Coordinate identifying details outside MMS Connect through an approved secure channel.' : 'Use invented names and scenarios. Do not enter Social Security numbers, dates of birth, medical records, financial details, or real client information.'}</p></div></div>
+      <section class="referral-metrics" aria-label="Referral summary">${[['Received', received], ['Needs response', needsResponse], ['Active', active], ['Completed', completed]].map(([label, value]) => `<article><span>${escapeHtml(label)}</span><strong>${value}</strong></article>`).join('')}</section>
+      <section class="admin-panel referral-compose"><div class="referral-section-heading"><div><p class="eyebrow">New connection</p><h2>Create ${lite ? 'an anonymous service referral' : 'a fictional referral'}</h2><p>The recipient can acknowledge, accept, decline, and complete it.</p></div></div>
         ${canCreate ? `<form id="referralCreateForm" class="admin-form">
           <div class="two-fields"><div class="field"><label for="referralRecipient">Refer to</label><select id="referralRecipient" name="recipientOrganizationId" required><option value="">Select an approved organization</option>${data.directory.map(organization => `<option value="${escapeHtml(organization.id)}">${escapeHtml(organization.name)} — ${escapeHtml(organization.test_mode ? 'Fictional demo' : organization.organization_type === 'mms' ? 'MMS' : roleLabel(organization.organization_type))}</option>`).join('')}</select></div>
-          <div class="field"><label for="referralService">Service requested</label><select id="referralService" name="serviceRequested" required><option value="">Select a service</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}</select></div></div>
-          <div class="two-fields"><div class="field"><label for="referralClientLabel">Fictional client or case label</label><input id="referralClientLabel" name="clientLabel" maxlength="120" placeholder="Example: Captain Tater Tot" required><small class="field-help">Use an invented label for staging. Do not use a real client name.</small></div>
-          <div class="field"><label for="referralUrgency">Urgency</label><select id="referralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div>
-          <div class="field"><label for="referralSummary">Fictional referral summary</label><textarea id="referralSummary" name="summary" minlength="10" maxlength="1000" placeholder="Describe the fictional need and requested next step." required></textarea><small class="field-help">Minimum necessary information only. Never include test SSNs, even fictional ones.</small></div>
-          <label class="test-confirmation"><input name="consentConfirmed" type="checkbox" required><span>I confirm the fictional client authorized this referral and information sharing.</span></label>
-          <label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm every detail in this referral is fictional staging information.</span></label>
-          <button class="button primary" type="submit">Send fictional referral</button>
+          <div class="field"><label for="referralService">Broad service category</label><select id="referralService" name="serviceRequested" required><option value="">Select a service</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('')}</select></div></div>
+          ${lite ? '<div class="field"><label for="referralUrgency">Urgency</label><select id="referralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div>' : detailFields}
+          <label class="test-confirmation"><input name="consentConfirmed" type="checkbox" required><span>${lite ? 'I confirm I have authorization to make this anonymous service referral and will coordinate identifying information outside MMS Connect through an approved secure channel.' : 'I confirm the fictional client authorized this simulated referral.'}</span></label>
+          ${lite ? '' : '<label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm every detail in this referral is fictional staging information.</span></label>'}
+          <button class="button primary" type="submit">Send ${lite ? 'anonymous referral' : 'fictional referral'}</button>
         </form>` : '<p class="admin-empty">No other approved organizations are available in the referral directory yet.</p>'}
       </section>
       ${demoOrganizations.length ? `<section class="admin-panel demo-referral-lab"><div class="referral-section-heading"><div><p class="eyebrow">End-to-end test lab</p><h2>Generate a fictional agency referral to MMS</h2><p>Choose a demo company, send an inbound referral, then process it through the MMS and recipient steps.</p></div><span class="demo-badge">Staging only</span></div>
         <div class="demo-company-grid">${demoOrganizations.map(organization => `<article><div><strong>${escapeHtml(organization.name)}</strong><span>${escapeHtml(organization.organization_type === 'facility' ? 'Fictional facility' : 'Fictional agency')}</span></div><p>${escapeHtml(organization.description || '')}</p><div>${(organization.service_categories || []).map(service => `<span class="service-chip">${escapeHtml(referralServiceLabels[service] || service)}</span>`).join('')}</div></article>`).join('')}</div>
         <form id="demoInboundReferralForm" class="admin-form"><div class="two-fields"><div class="field"><label for="demoSenderOrganization">Fictional sending company</label><select id="demoSenderOrganization" name="senderOrganizationId" required><option value="">Select a fictional company</option>${demoOrganizations.map(organization => `<option value="${escapeHtml(organization.id)}" data-demo-services="${escapeHtml((organization.service_categories || []).join(','))}">${escapeHtml(organization.name)}</option>`).join('')}</select></div><div class="field"><label for="demoReferralService">Service requested from MMS</label><select id="demoReferralService" name="serviceRequested" required><option value="">Select the company first</option>${Object.entries(referralServiceLabels).map(([value, label]) => `<option value="${value}" disabled>${escapeHtml(label)}</option>`).join('')}</select></div></div><div class="two-fields"><div class="field"><label for="demoClientLabel">Fictional client / case label</label><input id="demoClientLabel" name="clientLabel" maxlength="120" value="Professor Pickles" required></div><div class="field"><label for="demoReferralUrgency">Urgency</label><select id="demoReferralUrgency" name="urgency"><option value="routine">Routine</option><option value="priority">Priority follow-up</option><option value="time_sensitive">Time-sensitive</option></select></div></div><div class="field"><label for="demoReferralSummary">Fictional referral summary</label><textarea id="demoReferralSummary" name="summary" minlength="10" maxlength="1000" required>Professor Pickles needs fictional help coordinating services with Medicaid Made Simple.</textarea></div><label class="test-confirmation"><input name="consentConfirmed" type="checkbox" required><span>I confirm the fictional client authorized this simulated referral.</span></label><label class="test-confirmation"><input name="fictionalConfirmation" type="checkbox" required><span>I confirm every detail is fictional and intended only for staging.</span></label><button class="button primary" type="submit">Generate inbound demo referral</button></form>
       </section>` : ''}
-      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Shared tracking</p><h2>All referrals</h2><p>Open any referral to see its current owner, allowed next actions, and complete history.</p></div></div>${referralListTable(referrals)}</section>`;
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Shared tracking</p><h2>All referrals</h2><p>Open any referral to see its route, status, and allowed next actions.</p></div></div>${referralListTable(referrals, lite)}</section>`;
   } catch (error) {
     elements.dashboardContent.innerHTML = `<section class="content-heading"><p class="eyebrow">Connected care</p><h1>Referral Network</h1></section><div class="form-message error">${escapeHtml(error.message)}</div>`;
   }
@@ -1052,18 +1064,19 @@ async function renderReferralDetail(referralId, notice = '') {
   elements.headerViewName.textContent = 'Referral Details';
   elements.dashboardContent.innerHTML = '<section class="content-heading"><p class="eyebrow">Referral</p><h1>Loading referral…</h1></section>';
   try {
-    const { referral, events = [] } = await adminRequest(`/api/referrals?referralId=${encodeURIComponent(referralId)}`);
+    const { referralMode: detailMode, referral, events = [] } = await adminRequest(`/api/referrals?referralId=${encodeURIComponent(referralId)}`);
+    const lite = detailMode === 'referral_lite';
     elements.dashboardContent.innerHTML = `
       <button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button>
-      <section class="content-heading referral-heading"><div><p class="eyebrow">${escapeHtml(referral.reference_number)}</p><h1>${escapeHtml(referral.client_label)}</h1><p>${escapeHtml(referral.sender_organization)}${referral.sender_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''} <span aria-hidden="true">→</span> ${escapeHtml(referral.recipient_organization)}${referral.recipient_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''}</p></div><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></section>
+      <section class="content-heading referral-heading"><div><p class="eyebrow">${escapeHtml(referral.reference_number)}</p><h1>${escapeHtml(lite ? 'Anonymous service referral' : referral.client_label)}</h1><p>${escapeHtml(referral.sender_organization)}${referral.sender_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''} <span aria-hidden="true">→</span> ${escapeHtml(referral.recipient_organization)}${referral.recipient_is_test ? ' <span class="demo-badge">Fictional demo</span>' : ''}</p></div><span class="referral-status ${referralStatusClass(referral.status)}">${escapeHtml(referralStatusLabel(referral.status))}</span></section>
       ${notice ? `<div class="form-message success">${escapeHtml(notice)}</div>` : ''}
-      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>Fictional staging record.</strong><p>Do not add real client, medical, financial, or identifying information to this referral or its updates.</p></div></div>
-      <div class="referral-detail-grid"><section class="admin-panel"><h2>Referral summary</h2><dl class="referral-facts"><dt>Service</dt><dd>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</dd><dt>Urgency</dt><dd>${escapeHtml(referral.urgency.replaceAll('_', ' '))}</dd><dt>Sent</dt><dd>${escapeHtml(formatReferralDateTime(referral.created_at))}</dd><dt>From</dt><dd>${escapeHtml(referral.sender_organization)}</dd><dt>To</dt><dd>${escapeHtml(referral.recipient_organization)}</dd></dl><div class="referral-summary-copy"><strong>Requested help</strong><p>${escapeHtml(referral.summary)}</p></div>
+      <div class="safety-banner"><span aria-hidden="true">!</span><div><strong>${lite ? 'Referral Lite — anonymous status tracking.' : 'Fictional staging record.'}</strong><p>${lite ? 'This record must remain free of client names, contact details, medical or financial information, summaries, notes, and documents.' : 'Do not add real client, medical, financial, or identifying information to this referral or its updates.'}</p></div></div>
+      <div class="referral-detail-grid"><section class="admin-panel"><h2>Referral routing</h2><dl class="referral-facts"><dt>Service</dt><dd>${escapeHtml(referralServiceLabels[referral.service_requested] || referral.service_requested)}</dd><dt>Urgency</dt><dd>${escapeHtml(referral.urgency.replaceAll('_', ' '))}</dd><dt>Sent</dt><dd>${escapeHtml(formatReferralDateTime(referral.created_at))}</dd><dt>From</dt><dd>${escapeHtml(referral.sender_organization)}</dd><dt>To</dt><dd>${escapeHtml(referral.recipient_organization)}</dd></dl>${lite ? '' : `<div class="referral-summary-copy"><strong>Requested help</strong><p>${escapeHtml(referral.summary)}</p></div>`}
         ${referral.allowed_status_actions?.length ? `<div class="referral-actions"><h3>Available next actions</h3>${referral.allowed_status_actions.map(status => `<button class="button ${['accepted', 'acknowledged', 'in_progress', 'completed'].includes(status) ? 'primary' : 'secondary'}" type="button" data-referral-status="${escapeHtml(status)}" data-referral-id="${escapeHtml(referral.id)}">${escapeHtml(referralStatusLabel(status))}</button>`).join('')}</div>` : '<p class="admin-empty">No status action is required from your role right now.</p>'}
         ${referral.recipient_simulation_actions?.length ? `<div class="demo-simulator"><span class="demo-badge">Staging simulator</span><h3>Respond as ${escapeHtml(referral.recipient_organization)}</h3><p>Use these buttons to test the fictional recipient’s side without a shared password.</p><div>${referral.recipient_simulation_actions.map(status => `<button class="button secondary" type="button" data-simulate-referral-status="${escapeHtml(status)}" data-referral-id="${escapeHtml(referral.id)}">Simulate ${escapeHtml(referralStatusLabel(status))}</button>`).join('')}</div></div>` : ''}
       </section>
-      <section class="admin-panel"><h2>Add an update</h2><form id="referralNoteForm" data-referral-id="${escapeHtml(referral.id)}"><div class="field"><label for="referralNote">Fictional update</label><textarea id="referralNote" name="note" minlength="2" maxlength="1000" placeholder="Add a next step or coordination update." required></textarea></div><button class="button secondary" type="submit">Add update</button></form></section></div>
-      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Closed-loop history</p><h2>Referral timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(referralEventLabel(event))}</strong><small>${escapeHtml(referralEventActor(event))} · ${escapeHtml(formatReferralDateTime(event.created_at))}</small>${event.note ? `<p>${escapeHtml(event.note)}</p>` : ''}</div></li>`).join('') : '<li><div><strong>No history is available.</strong></div></li>'}</ol></section>`;
+      ${lite ? '<section class="admin-panel"><h2>Secure coordination reminder</h2><p>Use the referral reference number when coordinating. Exchange identifying information only through an approved secure channel outside MMS Connect.</p></section>' : `<section class="admin-panel"><h2>Add an update</h2><form id="referralNoteForm" data-referral-id="${escapeHtml(referral.id)}"><div class="field"><label for="referralNote">Fictional update</label><textarea id="referralNote" name="note" minlength="2" maxlength="1000" placeholder="Add a next step or coordination update." required></textarea></div><button class="button secondary" type="submit">Add update</button></form></section>`}</div>
+      <section class="admin-panel"><div class="referral-section-heading"><div><p class="eyebrow">Closed-loop history</p><h2>Referral timeline</h2></div></div><ol class="referral-timeline">${events.length ? events.map(event => `<li><span class="timeline-dot" aria-hidden="true"></span><div><strong>${escapeHtml(referralEventLabel(event))}</strong><small>${escapeHtml(referralEventActor(event))} · ${escapeHtml(formatReferralDateTime(event.created_at))}</small>${!lite && event.note ? `<p>${escapeHtml(event.note)}</p>` : ''}</div></li>`).join('') : '<li><div><strong>No history is available.</strong></div></li>'}</ol></section>`;
   } catch (error) {
     elements.dashboardContent.innerHTML = `<button class="back-button" type="button" data-back-referrals>← Back to Referral Network</button><div class="form-message error">${escapeHtml(error.message)}</div>`;
   }
@@ -1172,7 +1185,7 @@ function wireInterface() {
     const referralStatusButton = event.target.closest('[data-referral-status]');
     if (referralStatusButton) {
       const nextStatus = referralStatusButton.dataset.referralStatus;
-      if (!window.confirm(`Change this fictional referral to “${referralStatusLabel(nextStatus)}”?`)) return;
+      if (!window.confirm(`Change this referral to “${referralStatusLabel(nextStatus)}”?`)) return;
       referralStatusButton.disabled = true;
       return void adminRequest('/api/referrals', { method: 'POST', body: { action: 'update_status', referralId: referralStatusButton.dataset.referralId, status: nextStatus } })
         .then(() => renderReferralDetail(referralStatusButton.dataset.referralId, `Referral status changed to ${referralStatusLabel(nextStatus)}.`))
@@ -1321,11 +1334,16 @@ function wireInterface() {
       if (!form.reportValidity()) return;
       const values = new FormData(form);
       setBusy(form, true);
-      return void adminRequest('/api/referrals', { method: 'POST', body: {
+      const body = {
         action: 'create', recipientOrganizationId: values.get('recipientOrganizationId'), serviceRequested: values.get('serviceRequested'),
-        clientLabel: values.get('clientLabel'), urgency: values.get('urgency'), summary: values.get('summary'),
-        consentConfirmed: values.get('consentConfirmed') === 'on', fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
-      } }).then(({ referral }) => renderReferralDetail(referral.id, 'Fictional referral sent. Both organizations can now track it.'))
+        urgency: values.get('urgency'), consentConfirmed: values.get('consentConfirmed') === 'on'
+      };
+      if (referralMode !== 'referral_lite') Object.assign(body, {
+        clientLabel: values.get('clientLabel'), summary: values.get('summary'),
+        fictionalConfirmation: values.get('fictionalConfirmation') === 'on'
+      });
+      return void adminRequest('/api/referrals', { method: 'POST', body })
+        .then(({ referral }) => renderReferralDetail(referral.id, referralMode === 'referral_lite' ? 'Anonymous service referral sent. Both organizations can now track its status.' : 'Fictional referral sent. Both organizations can now track it.'))
         .catch(error => { setBusy(form, false); window.alert(error.message); });
     }
     if (event.target.id === 'referralNoteForm') {

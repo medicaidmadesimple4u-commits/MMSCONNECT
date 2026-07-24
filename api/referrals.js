@@ -22,6 +22,7 @@ function targetEnvironment() { return process.env.VERCEL_TARGET_ENV || process.e
 function productionEnabled() { return targetEnvironment() !== 'production' || process.env.MMS_REFERRALS_ENABLED === 'true'; }
 function referralEnvironment() { return targetEnvironment() === 'production' ? 'production' : 'staging'; }
 function testMode() { return referralEnvironment() === 'staging'; }
+function referralLiteMode() { return referralEnvironment() === 'production'; }
 function isPrivileged(context) { return privilegedRoles.has(context.profile.account_type); }
 function isAccessible(context, referral) {
   return isPrivileged(context) || referral.sender_organization_id === context.profile.organization_id || referral.recipient_organization_id === context.profile.organization_id;
@@ -46,7 +47,7 @@ function allowedStatusActions(context, referral) {
 }
 
 async function listAccessibleReferrals(context) {
-  const select = 'id,reference_number,sender_organization_id,recipient_organization_id,created_by,source_application_id,client_label,service_requested,urgency,summary,status,environment,test_mode,acknowledged_at,accepted_at,completed_at,closed_at,created_at,updated_at';
+  const select = 'id,reference_number,sender_organization_id,recipient_organization_id,created_by,source_application_id,client_label,service_requested,urgency,summary,status,environment,test_mode,coordination_mode,acknowledged_at,accepted_at,completed_at,closed_at,created_at,updated_at';
   const scope = `&environment=eq.${referralEnvironment()}&test_mode=eq.${testMode()}`;
   if (isPrivileged(context)) return serviceRequest(`/rest/v1/referrals?select=${select}${scope}&order=updated_at.desc&limit=500`);
   const organizationId = encodeURIComponent(context.profile.organization_id);
@@ -77,6 +78,7 @@ async function eventHistory(referralId, organizations) {
     const actor = actors.get(event.actor_id);
     return {
       ...event,
+      note: referralLiteMode() ? null : event.note,
       actor_name: actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || 'MMS Connect user' : 'MMS Connect user',
       actor_organization: organizations.get(event.acting_organization_id)?.name || actor?.organization_name || '',
       simulated: event.event_type === 'demo_recipient_status_changed' || event.event_type === 'demo_referral_sent'
@@ -87,7 +89,7 @@ async function eventHistory(referralId, organizations) {
 function decorateReferral(context, referral, organizations) {
   const sender = organizations.get(referral.sender_organization_id);
   const recipient = organizations.get(referral.recipient_organization_id);
-  return {
+  const decorated = {
     ...referral,
     source_application_id: isPrivileged(context) ? referral.source_application_id || null : null,
     sender_organization: sender?.name || 'Unknown organization',
@@ -99,6 +101,13 @@ function decorateReferral(context, referral, organizations) {
     allowed_status_actions: allowedStatusActions(context, referral),
     recipient_simulation_actions: testMode() && isPrivileged(context) && recipient?.test_mode ? recipientStatusActions(referral) : []
   };
+  if (referralLiteMode()) {
+    delete decorated.client_label;
+    delete decorated.summary;
+    delete decorated.source_application_id;
+    decorated.coordination_mode = 'referral_lite';
+  }
+  return decorated;
 }
 
 function timestampChanges(status) {
@@ -125,13 +134,17 @@ export default async function handler(request, response) {
         if (!validUuid(referralId)) return sendJson(response, 400, { error: 'Select a valid referral.' });
         const referral = await referralById(referralId);
         if (!referral || !isAccessible(context, referral)) return sendJson(response, 404, { error: 'The referral was not found.' });
-        return sendJson(response, 200, { referral: decorateReferral(context, referral, organizationMap), events: await eventHistory(referral.id, organizationMap) });
+        return sendJson(response, 200, {
+          referralMode: referralLiteMode() ? 'referral_lite' : 'fictional_test',
+          referral: decorateReferral(context, referral, organizationMap),
+          events: await eventHistory(referral.id, organizationMap)
+        });
       }
       const referrals = await listAccessibleReferrals(context);
       const activeDirectory = organizations.filter(organization => organization.status === 'active' && organization.id !== context.profile.organization_id && (testMode() || !organization.test_mode)).map(({ status, ...organization }) => organization);
       const demoOrganizations = testMode() && isPrivileged(context) ? organizations.filter(organization => organization.status === 'active' && organization.test_mode) : [];
       return sendJson(response, 200, {
-        referralMode: targetEnvironment() === 'production' ? 'production' : 'fictional_test',
+        referralMode: referralLiteMode() ? 'referral_lite' : 'fictional_test',
         organization: organizationMap.get(context.profile.organization_id) || null,
         directory: activeDirectory,
         demoOrganizations,
@@ -154,10 +167,14 @@ export default async function handler(request, response) {
       const senderOrganization = organizationMap.get(senderOrganizationId);
       const recipientOrganization = organizationMap.get(recipientOrganizationId);
       if (demoInbound && (!staging || !isPrivileged(context) || context.profile.organization_id !== mmsOrganizationId)) return sendJson(response, 403, { error: 'Only MMS staff can generate fictional inbound referrals in staging.' });
+      if (!staging && (clientLabel || summary || requestedSourceApplicationId || text(body.note, 1000))) return sendJson(response, 400, {
+        error: 'Referral Lite does not accept client names, case labels, summaries, notes, intake links, or other confidential information.'
+      });
       if (demoInbound && (!validUuid(senderOrganizationId) || !senderOrganization?.test_mode || recipientOrganization?.id !== mmsOrganizationId)) return sendJson(response, 400, { error: 'Select a fictional staging organization.' });
       if (!senderOrganization || senderOrganization.status !== 'active') return sendJson(response, 403, { error: 'Your organization is not active in the referral directory.' });
       if (!validUuid(recipientOrganizationId) || !recipientOrganization || recipientOrganization.status !== 'active' || recipientOrganizationId === senderOrganization.id) return sendJson(response, 400, { error: 'Select another active organization or Medicaid Made Simple.' });
-      if (!services.has(serviceRequested) || !urgencies.has(urgency) || clientLabel.length < 2 || summary.length < 10) return sendJson(response, 400, { error: 'Complete the client label, service, urgency, and referral summary.' });
+      if (!services.has(serviceRequested) || !urgencies.has(urgency)) return sendJson(response, 400, { error: 'Select a service and urgency.' });
+      if (staging && (clientLabel.length < 2 || summary.length < 10)) return sendJson(response, 400, { error: 'Complete the fictional client label and referral summary.' });
       if (demoInbound && !senderOrganization.service_categories?.includes(serviceRequested)) return sendJson(response, 400, { error: 'Select a service offered by the fictional sending organization.' });
       if (recipientOrganization.test_mode && !recipientOrganization.service_categories?.includes(serviceRequested)) return sendJson(response, 400, { error: 'Select a service offered by the fictional recipient organization.' });
       if (body.consentConfirmed !== true) return sendJson(response, 400, { error: 'Confirm the client authorized this referral.' });
@@ -180,15 +197,17 @@ export default async function handler(request, response) {
       const date = new Date().toISOString().slice(2, 10).replaceAll('-', '');
       const referenceNumber = `MMS-R-${date}-${randomBytes(3).toString('hex').toUpperCase()}`;
       const created = await serviceRequest('/rest/v1/referrals', { method: 'POST', prefer: 'return=representation', body: {
-        reference_number: referenceNumber, sender_organization_id: senderOrganization.id, recipient_organization_id: recipientOrganization.id, source_application_id: sourceApplicationId,
-        created_by: context.user.id, client_label: clientLabel, service_requested: serviceRequested, urgency, summary, status: 'sent',
-        consent_confirmed_at: new Date().toISOString(), environment: staging ? 'staging' : 'production', test_mode: staging
+        reference_number: referenceNumber, sender_organization_id: senderOrganization.id, recipient_organization_id: recipientOrganization.id,
+        source_application_id: staging ? sourceApplicationId : null, created_by: context.user.id,
+        client_label: staging ? clientLabel : null, service_requested: serviceRequested, urgency, summary: staging ? summary : null, status: 'sent',
+        consent_confirmed_at: new Date().toISOString(), environment: staging ? 'staging' : 'production', test_mode: staging,
+        coordination_mode: staging ? 'standard' : 'referral_lite'
       } });
       const referral = created?.[0];
       await serviceRequest('/rest/v1/referral_events', { method: 'POST', prefer: 'return=minimal', body: {
         referral_id: referral.id, actor_id: context.user.id, acting_organization_id: senderOrganization.id,
         event_type: demoInbound ? 'demo_referral_sent' : 'referral_sent', previous_status: null, new_status: 'sent',
-        note: demoInbound ? `Fictional inbound referral generated for testing as ${senderOrganization.name}.` : 'Referral created and sent.'
+        note: staging ? (demoInbound ? `Fictional inbound referral generated for testing as ${senderOrganization.name}.` : 'Referral created and sent.') : null
       } });
       return sendJson(response, 201, { referral: decorateReferral(context, referral, organizationMap) });
     }
@@ -199,6 +218,7 @@ export default async function handler(request, response) {
     if (!referral || !isAccessible(context, referral)) return sendJson(response, 404, { error: 'The referral was not found.' });
 
     if (action === 'add_note') {
+      if (referralLiteMode()) return sendJson(response, 403, { error: 'Referral Lite does not accept free-text updates or confidential information.' });
       const note = text(body.note, 1000);
       if (note.length < 2) return sendJson(response, 400, { error: 'Enter a referral update.' });
       await serviceRequest('/rest/v1/referral_events', { method: 'POST', prefer: 'return=minimal', body: { referral_id: referral.id, actor_id: context.user.id, acting_organization_id: context.profile.organization_id, event_type: 'note_added', previous_status: referral.status, new_status: referral.status, note } });
@@ -223,7 +243,8 @@ export default async function handler(request, response) {
       const nextStatus = String(body.status || '');
       const allowed = allowedStatusActions(context, referral);
       if (!allowed.includes(nextStatus)) return sendJson(response, 403, { error: 'That status change is not available for your role or this referral.' });
-      const note = text(body.note, 1000) || null;
+      if (referralLiteMode() && text(body.note, 1000)) return sendJson(response, 400, { error: 'Referral Lite status changes cannot include notes.' });
+      const note = referralLiteMode() ? null : text(body.note, 1000) || null;
       const updated = await serviceRequest(`/rest/v1/referrals?id=eq.${encodeURIComponent(referral.id)}`, { method: 'PATCH', prefer: 'return=representation', body: { status: nextStatus, ...timestampChanges(nextStatus) } });
       await serviceRequest('/rest/v1/referral_events', { method: 'POST', prefer: 'return=minimal', body: { referral_id: referral.id, actor_id: context.user.id, acting_organization_id: context.profile.organization_id, event_type: 'status_changed', previous_status: referral.status, new_status: nextStatus, note } });
       return sendJson(response, 200, { referral: decorateReferral(context, updated?.[0], organizationMap) });

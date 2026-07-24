@@ -14,6 +14,7 @@ MMS Connect is the client and authorized-representative portal for Medicaid Made
 - Staging-only fictional intake through resources, living arrangement, insurance, authorized representative, review, submission, and administrator queue
 - Staff-only fictional intake testing with protected save and resume
 - Production-safe account and program-guidance mode with official ePASS, NCDHHS form, and county DSS handoffs
+- Production Referral Lite for anonymous organization-to-organization routing and status tracking
 - Versioned Terms of Use and Privacy Notice acceptance for new accounts
 - Fictional Household & Residency and Income & Employment workflows
 - Applications, Documents, Messages, Community Referrals, Profile, and Settings navigation
@@ -40,7 +41,9 @@ The publishable key is intended for browser use and is returned by `api/config.j
 
 ## Protected-data boundary
 
-The production account portal is approved only for account identity, organization verification, program guidance, and official application handoffs. It does not collect Social Security numbers, medical information, financial records, Medicaid applications, or documents. Those features remain disabled until the dedicated protected-data environment, vendor agreements, access policies, audit controls, retention procedures, and security review are complete.
+The production account portal is approved only for account identity, organization verification, program guidance, official application handoffs, and Referral Lite. Referral Lite stores only the sending and receiving organizations, broad service category, urgency, consent-confirmation time, random reference, status, timestamps, and actors. It has no client-name, contact, identifier, summary, note, intake-link, or document fields. Client-identifying coordination must occur outside MMS Connect through an approved secure channel.
+
+Production does not collect Social Security numbers, medical information, financial records, Medicaid applications, or documents. Those features remain disabled until the dedicated protected-data environment, vendor agreements, access policies, audit controls, retention procedures, and security review are complete.
 
 The program-to-question mapping is documented in [docs/NCDHHS_POLICY_MAP.md](docs/NCDHHS_POLICY_MAP.md). The intake preview uses official NCDHHS manuals and current 2026 limit-table sources without making an eligibility determination or saving confidential answers.
 

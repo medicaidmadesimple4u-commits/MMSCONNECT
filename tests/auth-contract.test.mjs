@@ -69,9 +69,13 @@ test('policy-guided intake covers the principal NCDHHS pathways', async () => {
     assert.ok(program.manualRefs.length, `${program.id} needs a manual reference`);
     assert.ok(policy.getProgramSections(program.id).length >= 8, `${program.id} needs a complete intake map`);
     assert.ok(policy.getProgramSources(program.id).every(source => /^(https:\/\/medicaid\.ncdhhs\.gov|https:\/\/policies\.ncdhhs\.gov)/.test(source.url)));
+    assert.ok(policy.getProgramManuals(program.id).length, `${program.id} needs a clickable program manual`);
+    assert.ok(policy.getProgramForms(program.id).length, `${program.id} needs pathway-specific forms or an official entry resource`);
   }
   assert.ok(policy.dssForms.length >= 7);
-  assert.ok(policy.dssForms.every(form => /^https:\/\/(policies\.ncdhhs\.gov|www\.ncdhhs\.gov|epass\.nc\.gov)/.test(form.url)));
+  assert.equal(new Set(policy.dssForms.map(form => form.id)).size, policy.dssForms.length);
+  assert.ok(policy.dssForms.every(form => form.kind && form.when));
+  assert.ok(policy.dssForms.every(form => /^https:\/\/(policies\.ncdhhs\.gov|www\.ncdhhs\.gov|www\.dph\.ncdhhs\.gov|medicaid\.ncdhhs\.gov|epass\.nc\.gov)/.test(form.url)));
   for (const reference of ['MA-2230', 'DMA-5202-A', 'DHB-5202C-ia', 'DMA-5202D-ia', 'DHB-5202E-ia']) assert.match(policy.getPolicyReferenceUrl(reference), /^https:\/\//);
 });
 
@@ -84,7 +88,7 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm', 'resourceForm', 'livingArrangementForm', 'healthCoverageForm', 'authorizedRepresentativeForm', 'reviewStatusForm']) assert.match(script, new RegExp(formId));
   for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status', 'reset', 'delete_application']) assert.match(script, new RegExp(action));
   assert.match(script, /policyReferenceLinks/);
-  assert.match(script, /Official NC Medicaid and DSS forms/);
+  assert.match(script, /Application forms and official entry steps/);
   assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(policy, /\$\d|monthly_limit|resource_limit/i);
@@ -188,9 +192,10 @@ test('new account consent is versioned and server-recorded', async () => {
   assert.match(sql, /revoke all on public\.account_consents from anon, authenticated/i);
 });
 
-test('referral network is closed-loop, role protected, and staging safe', async () => {
-  const [script, api, config, sql] = await Promise.all([
-    read('auth.js'), read('api/referrals.js'), read('api/config.js'), read('supabase/migrations/20260717001500_add_referral_network.sql')
+test('referral network is closed-loop, role protected, and production-data minimal', async () => {
+  const [script, api, config, sql, liteSql] = await Promise.all([
+    read('auth.js'), read('api/referrals.js'), read('api/config.js'), read('supabase/migrations/20260717001500_add_referral_network.sql'),
+    read('supabase/migrations/20260723120000_add_production_referral_lite.sql')
   ]);
   assert.match(config, /referralMode/);
   assert.match(config, /MMS_REFERRALS_ENABLED/);
@@ -210,6 +215,15 @@ test('referral network is closed-loop, role protected, and staging safe', async 
   assert.match(script, /renderReferralDetail/);
   assert.match(script, /id="referralCreateForm"/);
   assert.match(script, /Fictional staging referrals only/);
+  assert.match(script, /Referral Lite — no client information/);
+  assert.match(api, /Referral Lite does not accept client names/);
+  assert.match(api, /referralLiteMode\(\) \? null/);
+  assert.match(config, /'referral_lite'/);
+  assert.match(liteSql, /coordination_mode = 'referral_lite'/i);
+  assert.match(liteSql, /client_label is null/i);
+  assert.match(liteSql, /summary is null/i);
+  assert.match(liteSql, /source_application_id is null/i);
+  assert.match(liteSql, /enforce_referral_lite_event_boundary/i);
   assert.doesNotMatch(script, /\.from\(['"]referrals['"]\)/);
 });
 

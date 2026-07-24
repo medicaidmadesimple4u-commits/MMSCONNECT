@@ -69,8 +69,6 @@ export const dssForms = [
 
 const manualsById = new Map(programManuals.map(item => [item.id, item]));
 const formsById = new Map(dssForms.map(item => [item.id, item]));
-const specialAssistanceManualUrl = 'https://policies.ncdhhs.gov/wp-content/uploads/Special-Assistance-Manual-Rev-July-2024.pdf';
-const specialAssistanceInHomeManualUrl = 'https://policies.ncdhhs.gov/wp-content/uploads/Special-Assistance-In-Home-Program-Manual-Rev-June-2026.pdf';
 
 const policyReferenceLinks = {
   'NC Medicaid application': formsById.get('dhb5200').url,
@@ -82,7 +80,6 @@ const policyReferenceLinks = {
   'DMA-5202D-ia': formsById.get('appendixD').url,
   'DHB-5202E-ia': formsById.get('appendixE').url,
   'FL-2 requirements': formsById.get('fl2').url,
-  'MA-3200': manualsById.get('ma3200').url,
   'MA-3236': manualsById.get('ma3236').url,
   'MA-3230': manualsById.get('ma3230').url,
   'MA-3240': manualsById.get('ma3240').url,
@@ -91,64 +88,16 @@ const policyReferenceLinks = {
   'MA-3234': manualsById.get('ma3234').url,
   'MA-3265': manualsById.get('ma3265').url,
   'MA-3250': manualsById.get('ma3250').url,
-  'MA-3300': 'https://policies.ncdhhs.gov/document/ma-3300-income/',
-  'MA-3306': 'https://policies.ncdhhs.gov/document/ma-3306-modified-adjusted-gross-income-magi/',
-  'MA-3330': 'https://policies.ncdhhs.gov/document/ma-3330-alien-requirements/',
-  'MA-3331': 'https://policies.ncdhhs.gov/document/ma-3331-citizenship-identity-ssa-data-match/',
-  'MA-3332': 'https://policies.ncdhhs.gov/document/ma-3332-us-citizenship-requirements/',
-  'MA-3335': 'https://policies.ncdhhs.gov/document/ma-3335-state-residency/',
-  'MA-3340': 'https://policies.ncdhhs.gov/document/ma-3340-county-residence/',
-  'MA-3345': 'https://policies.ncdhhs.gov/document/ma-3345-age-name-marital-status/',
-  'MA-3360': 'https://policies.ncdhhs.gov/document/ma-3360-living-arrangement/',
-  'MA-3510': 'https://policies.ncdhhs.gov/document/ma-3510-third-party-recovery/',
   'MA-2000': manualsById.get('ma2000').url,
   'MA-2130': manualsById.get('ma2130').url,
   'MA-2140': manualsById.get('ma2140').url,
   'MA-2160': manualsById.get('ma2160').url,
   'MA-2180': manualsById.get('ma2180').url,
-  'MA-2220': 'https://policies.ncdhhs.gov/document/ma-2220-state-residency/',
-  'MA-2221': 'https://policies.ncdhhs.gov/document/ma-2221-county-residence/',
-  'MA-2230': 'https://policies.ncdhhs.gov/document/ma-2230-financial-resources/',
-  'MA-2231': 'https://policies.ncdhhs.gov/document/ma-2231-community-spouse-resource-protection-effective-1-1-2025/',
-  'MA-2240': 'https://policies.ncdhhs.gov/document/ma-2240-transfer-of-assets/',
-  'MA-2242': 'https://policies.ncdhhs.gov/document/ma-2242-home-equity-value-eligibility-for-institutional-services-1-1-2025/',
-  'MA-2245': 'https://policies.ncdhhs.gov/document/ma-2245-undue-hardship-waiver-for-transfer-of-assets/',
-  'MA-2250': 'https://policies.ncdhhs.gov/document/ma-2250-income-1-1-2025/',
   'MA-2270': manualsById.get('ma2270').url,
   'MA-2275': manualsById.get('ma2275').url,
   'MA-2280': manualsById.get('ma2280').url,
   'MA-2282': manualsById.get('ma2282').url,
-  'MA-2283': manualsById.get('ma2283').url,
-  'MA-2300': manualsById.get('ma2300').url,
-  'MA-2400': 'https://policies.ncdhhs.gov/document/ma-2400-third-party-recovery/',
-  'MA-2500': 'https://policies.ncdhhs.gov/document/ma-2500-age-name-marital-status/',
-  'MA-2504': 'https://policies.ncdhhs.gov/document/ma-2504-alien-requirements/',
-  'MA-2505': 'https://policies.ncdhhs.gov/document/ma-2505-citizenship-identity-ssa-data-match/',
-  'MA-2506': 'https://policies.ncdhhs.gov/document/ma-2506-us-citizenship-requirements/',
-  'MA-2510': 'https://policies.ncdhhs.gov/document/ma-2510-living-arrangement/',
-  'MA-2525': 'https://policies.ncdhhs.gov/document/ma-2525-disability-effective-1-1-2025/',
-  'MA-2531': 'https://policies.ncdhhs.gov/document/ma-2531-blindness-mab/',
-  'SA-3100': `${specialAssistanceManualUrl}#page=3`,
-  'SA-3100 II — General eligibility': `${specialAssistanceManualUrl}#page=6`,
-  'SA-3100 III — Age and disability': `${specialAssistanceManualUrl}#page=8`,
-  'SA-3100 IV — State residence': `${specialAssistanceManualUrl}#page=10`,
-  'SA-3100 V — Approved facilities': `${specialAssistanceManualUrl}#page=12`,
-  'SA-3100 VII — FL-2 and level of care': `${specialAssistanceManualUrl}#page=14`,
-  'SA-3110': `${specialAssistanceManualUrl}#page=18`,
-  'SA-3200': `${specialAssistanceManualUrl}#page=56`,
-  'SA-3205': `${specialAssistanceManualUrl}#page=129`,
-  'SA-3210': `${specialAssistanceManualUrl}#page=154`,
-  'SA-3220': `${specialAssistanceManualUrl}#page=201`,
-  'SA-3240': `${specialAssistanceManualUrl}#page=219`,
-  'SA-5000': `${specialAssistanceInHomeManualUrl}#page=3`,
-  'SA-5100': `${specialAssistanceInHomeManualUrl}#page=6`,
-  'SA-5200': `${specialAssistanceInHomeManualUrl}#page=12`,
-  'SA-5200 I — SAIH and Medicaid': `${specialAssistanceInHomeManualUrl}#page=14`,
-  'SA-5200 II — FL-2 level of care': `${specialAssistanceInHomeManualUrl}#page=16`,
-  'SA-5200 III — Living arrangement and county': `${specialAssistanceInHomeManualUrl}#page=17`,
-  'SA-5200 IV — Resources': `${specialAssistanceInHomeManualUrl}#page=18`,
-  'SA-5200 V — Income': `${specialAssistanceInHomeManualUrl}#page=18`,
-  'SAIH Manual': specialAssistanceInHomeManualUrl
+  'MA-2283': manualsById.get('ma2283').url
 };
 
 export function getPolicyReferenceUrl(reference) {
@@ -183,67 +132,6 @@ export const intakeSections = {
   documents: { title: 'Possible supporting information', summary: 'A tailored checklist of information that may help DSS process the application. A person may still apply when some documents are unavailable.', policy: ['NC Medicaid application instructions'] }
 };
 
-const magiSectionPolicies = {
-  applicant: ['MA-3200 — Application', 'MA-3345 — Age, name, and marital status'],
-  residency: ['MA-3335 — State residency', 'MA-3340 — County residence'],
-  citizenship: ['MA-3330 — Alien requirements', 'MA-3331 — Citizenship/identity SSA match', 'MA-3332 — U.S. citizenship'],
-  household: ['MA-3306 III — MAGI household composition'],
-  income: ['MA-3300 — Income', 'MA-3306 IV–IX — MAGI income and budgeting'],
-  healthCoverage: ['MA-3510 — Third-party recovery', 'DMA-5202-A'],
-  authorizedRepresentative: ['MA-3200 — Application', 'DHB-5202C-ia'],
-  additionalSupport: intakeSections.additionalSupport.policy,
-  retroactive: ['MA-3200 — Application', 'DHB-5202E-ia'],
-  documents: ['MA-3200 — Application', 'NC Medicaid application instructions']
-};
-
-const adultSectionPolicies = {
-  applicant: ['MA-2300 — Application', 'MA-2500 — Age, name, and marital status'],
-  residency: ['MA-2220 — State residency', 'MA-2221 — County residence'],
-  citizenship: ['MA-2504 — Alien requirements', 'MA-2505 — Citizenship/identity SSA match', 'MA-2506 — U.S. citizenship'],
-  income: ['MA-2250 — Income'],
-  resources: ['MA-2230 — Financial resources', 'DMA-5202D-ia'],
-  transfers: ['MA-2240 — Transfer of assets', 'MA-2242 — Home equity', 'MA-2245 — Undue hardship waiver'],
-  healthCoverage: ['MA-2400 — Third-party recovery', 'DMA-5202-A'],
-  disability: ['MA-2000 — Non-SSI eligibility', 'MA-2525 — Disability', 'MA-2531 — Blindness'],
-  medicare: ['MA-2130 — QMB', 'MA-2140 — SLMB', 'MA-2160 — Qualifying Individual'],
-  livingArrangement: ['MA-2510 — Living arrangement'],
-  longTermCare: ['MA-2270 — Long-term care need and budgeting', 'MA-2231 — Community spouse resource protection'],
-  authorizedRepresentative: ['MA-2300 — Application', 'DHB-5202C-ia'],
-  additionalSupport: intakeSections.additionalSupport.policy,
-  retroactive: ['MA-2300 — Application', 'DHB-5202E-ia'],
-  documents: ['MA-2300 — Application', 'NC Medicaid application instructions']
-};
-
-const specialAssistanceSectionPolicies = {
-  applicant: ['SA-3110 — Application process', 'SA-3100 III — Age and disability'],
-  residency: ['SA-3100 IV — State residence'],
-  citizenship: ['SA-3240 — Citizenship and identity'],
-  income: ['SA-3210 — Income', 'SA-3220 — Budgeting principles'],
-  resources: ['SA-3200 — Resources', 'SA-3205 — Transfer of resources'],
-  healthCoverage: ['SA-3100 II — General eligibility', 'MA-2400 — Third-party recovery'],
-  livingArrangement: ['SA-3100 V — Approved facilities'],
-  disability: ['SA-3100 III — Age and disability', 'SA-3110 — Application process'],
-  fl2: ['SA-3100 VII — FL-2 and level of care', 'SA-3110 — Application process', 'FL-2 requirements'],
-  authorizedRepresentative: ['SA-3110 — Application process', 'DHB-5202C-ia'],
-  additionalSupport: intakeSections.additionalSupport.policy,
-  retroactive: ['SA-3110 — Application process', 'DHB-5202E-ia'],
-  documents: ['SA-3110 — Application process', 'NC Medicaid application instructions']
-};
-
-const specialAssistanceInHomeSectionPolicies = {
-  ...specialAssistanceSectionPolicies,
-  applicant: ['SA-5100 — Intake, referral, and time frames', 'SA-3110 — Application process'],
-  residency: ['SA-3100 IV — State residence', 'SA-5200 III — Living arrangement and county'],
-  income: ['SA-5200 V — Income', 'SA-3210 — Income', 'SA-3220 — Budgeting principles'],
-  resources: ['SA-5200 IV — Resources', 'SA-3200 — Resources', 'SA-3205 — Transfer of resources'],
-  healthCoverage: ['SA-5200 I — SAIH and Medicaid', 'MA-2400 — Third-party recovery'],
-  livingArrangement: ['SA-5200 III — Living arrangement and county'],
-  fl2: ['SA-5200 II — FL-2 level of care', 'SA-3100 VII — FL-2 and level of care', 'FL-2 requirements'],
-  authorizedRepresentative: ['SA-5100 — Intake, referral, and time frames', 'DHB-5202C-ia'],
-  retroactive: ['SA-5200 I — SAIH and Medicaid', 'DHB-5202E-ia'],
-  documents: ['SA-5100 — Intake, referral, and time frames', 'SA-3110 — Application process']
-};
-
 const commonMagi = ['applicant', 'residency', 'citizenship', 'household', 'income', 'healthCoverage', 'authorizedRepresentative', 'additionalSupport', 'retroactive', 'documents'];
 const commonAdult = ['applicant', 'residency', 'citizenship', 'income', 'resources', 'healthCoverage', 'livingArrangement', 'authorizedRepresentative', 'additionalSupport', 'retroactive', 'documents'];
 const institutional = [...commonAdult, 'transfers', 'longTermCare'];
@@ -271,70 +159,13 @@ export const medicaidPrograms = [
   { id: 'special_assistance_in_home', group: 'Related NCDHHS assistance pathways', title: 'Special Assistance In-Home', audience: 'Older adults or adults with disabilities seeking Special Assistance while living at home.', manualRefs: ['SA-3100', 'SA-3110', 'SAIH Manual'], manualIds: ['saManual', 'saihManual'], formIds: ['dss8190', 'dss0031', 'fl2', 'appendixC', 'dssDirectory'], sources: ['specialAssistance', 'specialAssistanceInHome', 'nonMagiLimits'], sections: [...commonAdult, 'disability', 'fl2'] }
 ];
 
-const programSectionPolicyOverrides = {
-  expansion_adult: { applicant: ['MA-3236 — Medicaid Expansion', ...magiSectionPolicies.applicant] },
-  infants_children: { applicant: ['MA-3230 — Auto Newborn', ...magiSectionPolicies.applicant] },
-  pregnancy: { applicant: ['MA-3240 — Pregnant Woman Coverage', ...magiSectionPolicies.applicant], pregnancy: ['MA-3240 — Pregnant Woman Coverage'] },
-  caretaker: { applicant: ['MA-3235 — Caretaker relatives / kinship', ...magiSectionPolicies.applicant] },
-  former_foster: {
-    applicant: ['MA-3233 — Former Foster Care', 'MA-3234 — Expanded Foster Care', ...magiSectionPolicies.applicant],
-    fosterCare: ['MA-3233 — Former Foster Care', 'MA-3234 — Expanded Foster Care']
-  },
-  family_planning: { applicant: ['MA-3265 — Family Planning Program', ...magiSectionPolicies.applicant] },
-  breast_cervical: { applicant: ['MA-3250 — Breast and Cervical Cancer Medicaid', ...magiSectionPolicies.applicant] },
-  aged_blind_disabled: { applicant: ['MA-2000 — Non-SSI eligibility', ...adultSectionPolicies.applicant] },
-  medicare_savings: {
-    applicant: ['MA-2130 — QMB', 'MA-2140 — SLMB', 'MA-2160 — Qualifying Individual', ...adultSectionPolicies.applicant],
-    medicare: adultSectionPolicies.medicare
-  },
-  working_disabled: {
-    applicant: ['MA-2180 — Health Coverage for Workers with Disabilities', ...adultSectionPolicies.applicant],
-    disability: ['MA-2180 — Health Coverage for Workers with Disabilities', 'MA-2525 — Disability']
-  },
-  long_term_care: {
-    applicant: ['MA-2270 — Long-term care need and budgeting', ...adultSectionPolicies.applicant],
-    longTermCare: adultSectionPolicies.longTermCare
-  },
-  cap: {
-    applicant: ['MA-2280 — Community Alternatives Program', ...adultSectionPolicies.applicant],
-    longTermCare: ['MA-2280 — Community Alternatives Program', ...adultSectionPolicies.longTermCare]
-  },
-  pace: {
-    applicant: ['MA-2275 — PACE', ...adultSectionPolicies.applicant],
-    longTermCare: ['MA-2275 — PACE', ...adultSectionPolicies.longTermCare]
-  },
-  innovations: {
-    applicant: ['MA-2282 — Innovations', ...adultSectionPolicies.applicant],
-    longTermCare: ['MA-2282 — Innovations', ...adultSectionPolicies.longTermCare],
-    disability: ['MA-2282 — Innovations', ...adultSectionPolicies.disability]
-  },
-  tbi: {
-    applicant: ['MA-2283 — TBI Waiver', ...adultSectionPolicies.applicant],
-    longTermCare: ['MA-2283 — TBI Waiver', ...adultSectionPolicies.longTermCare],
-    disability: ['MA-2283 — TBI Waiver', ...adultSectionPolicies.disability]
-  }
-};
-
 export function getProgram(programId) {
   return medicaidPrograms.find(program => program.id === programId) || null;
 }
 
 export function getProgramSections(programId) {
   const program = getProgram(programId);
-  if (!program) return [];
-  const basePolicies = program.id === 'special_assistance_facility'
-    ? specialAssistanceSectionPolicies
-    : program.id === 'special_assistance_in_home'
-      ? specialAssistanceInHomeSectionPolicies
-      : program.group === 'Family and MAGI pathways'
-        ? magiSectionPolicies
-        : adultSectionPolicies;
-  const overrides = programSectionPolicyOverrides[program.id] || {};
-  return [...new Set(program.sections)].map(sectionId => ({
-    id: sectionId,
-    ...intakeSections[sectionId],
-    policy: [...new Set(overrides[sectionId] || basePolicies[sectionId] || intakeSections[sectionId].policy)]
-  }));
+  return program ? [...new Set(program.sections)].map(sectionId => ({ id: sectionId, ...intakeSections[sectionId] })) : [];
 }
 
 export function getProgramSources(programId) {

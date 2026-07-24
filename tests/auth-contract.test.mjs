@@ -77,21 +77,6 @@ test('policy-guided intake covers the principal NCDHHS pathways', async () => {
   assert.ok(policy.dssForms.every(form => form.kind && form.when));
   assert.ok(policy.dssForms.every(form => /^https:\/\/(policies\.ncdhhs\.gov|www\.ncdhhs\.gov|www\.dph\.ncdhhs\.gov|medicaid\.ncdhhs\.gov|epass\.nc\.gov)/.test(form.url)));
   for (const reference of ['MA-2230', 'DMA-5202-A', 'DHB-5202C-ia', 'DMA-5202D-ia', 'DHB-5202E-ia']) assert.match(policy.getPolicyReferenceUrl(reference), /^https:\/\//);
-  for (const program of policy.medicaidPrograms) {
-    for (const section of policy.getProgramSections(program.id)) {
-      assert.ok(section.policy.length, `${program.id}/${section.id} needs a manual location`);
-      for (const reference of section.policy.filter(item => item !== 'MMS service coordination â€” not an eligibility factor')) {
-        const url = policy.getPolicyReferenceUrl(reference);
-        assert.match(url, /^https:\/\/(policies\.ncdhhs\.gov|medicaid\.ncdhhs\.gov)/, `${program.id}/${section.id}/${reference} needs an official link`);
-        if (/^(MA-|SA-)/.test(reference)) assert.match(url, /(\/document\/|\.pdf(?:#page=\d+)?$)/, `${program.id}/${section.id}/${reference} must link to its manual section, not a general index`);
-      }
-    }
-  }
-  assert.deepEqual(policy.getProgramSections('expansion_adult').find(section => section.id === 'residency').policy, ['MA-3335 — State residency', 'MA-3340 — County residence']);
-  assert.deepEqual(policy.getProgramSections('aged_blind_disabled').find(section => section.id === 'residency').policy, ['MA-2220 — State residency', 'MA-2221 — County residence']);
-  assert.ok(policy.getProgramSections('cap').find(section => section.id === 'longTermCare').policy[0].startsWith('MA-2280'));
-  assert.ok(policy.getProgramSections('special_assistance_facility').find(section => section.id === 'resources').policy.some(reference => reference.startsWith('SA-3200')));
-  assert.ok(policy.getProgramSections('special_assistance_in_home').find(section => section.id === 'livingArrangement').policy.some(reference => reference.startsWith('SA-5200 III')));
 });
 
 test('intake testing is marked fictional and avoids browser persistence', async () => {
@@ -103,8 +88,6 @@ test('intake testing is marked fictional and avoids browser persistence', async 
   for (const formId of ['residencyForm', 'householdMemberForm', 'incomeSourceForm', 'resourceForm', 'livingArrangementForm', 'healthCoverageForm', 'authorizedRepresentativeForm', 'reviewStatusForm']) assert.match(script, new RegExp(formId));
   for (const action of ['save_residency', 'save_household_member', 'delete_household_member', 'save_income_source', 'delete_income_source', 'save_resource', 'delete_resource', 'save_living_arrangement', 'save_health_coverage', 'delete_health_coverage', 'save_authorized_representative', 'submit', 'review_status', 'reset', 'delete_application']) assert.match(script, new RegExp(action));
   assert.match(script, /policyReferenceLinks/);
-  assert.match(script, /Manual location:/);
-  assert.match(script, /data-open-view="referrals".*Open Referral Network/);
   assert.match(script, /Application forms and official entry steps/);
   assert.doesNotMatch(script, /\.from\(['"]applications['"]\)|\.from\(['"]application_applicants['"]\)/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);

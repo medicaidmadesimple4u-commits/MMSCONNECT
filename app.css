@@ -440,6 +440,7 @@ a { color: var(--blue); text-underline-offset: 3px; }
 .intake-section-list h3 { margin: 0; color: var(--navy); font-size: .92rem; }
 .intake-section-list p { margin: 4px 0 7px; color: var(--muted); font-size: .8rem; line-height: 1.45; }
 .intake-section-list small { color: var(--teal); font-size: .7rem; font-weight: 800; }
+.intake-section-list .manual-location-label { color: var(--navy); }
 .intake-section-list .policy-navigation-link { display: inline; padding: 0; color: var(--teal); font: inherit; font-weight: 800; text-align: left; text-decoration: underline; text-underline-offset: 2px; background: transparent; border: 0; cursor: pointer; }
 .intake-section-list .policy-navigation-link:hover, .intake-section-list .policy-navigation-link:focus-visible { color: var(--blue); }
 .policy-sources { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
